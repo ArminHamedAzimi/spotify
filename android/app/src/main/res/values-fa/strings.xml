@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">اسپاتیفای</string>
+
+    <string name="tab_home">خانه</string>
+    <string name="tab_search">جستجو</string>
+    <string name="tab_downloads">دانلودها</string>
+    <string name="tab_playlists">پلی‌لیست‌ها</string>
+    <string name="tab_profile">پروفایل</string>
+</resources>

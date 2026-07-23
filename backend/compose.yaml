@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spotify}
+      POSTGRES_USER: ${POSTGRES_USER:-spotify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spotify}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spotify}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  createbucket:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        until mc alias set local http://minio:9000
+        "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
+        mc mb --ignore-existing local/spotify-media;
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+
+  web:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_HOST: db
+      MINIO_ENDPOINT: http://minio:9000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  minio_data:

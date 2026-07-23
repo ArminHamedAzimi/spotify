@@ -60,6 +60,37 @@ creation, the OpenAPI schema, and Swagger UI.
 - Fields documented as read-only must not be relied upon in request bodies.
   The server derives or manages them.
 
+### Premium fields
+
+Every user object contains these two read-only fields:
+
+```json
+{
+  "premium_expires_at": "2026-08-23T17:30:00Z",
+  "has_active_premium": true
+}
+```
+
+- `premium_expires_at` is the absolute ISO-8601 UTC timestamp at which premium
+  access expires. It is `null` when no expiration has been assigned.
+- `has_active_premium` is calculated by the server. It is `true` only when the
+  expiration timestamp is later than the server's current time.
+- At exactly the expiration timestamp, premium is no longer active.
+- A past expiration remains visible but returns `has_active_premium: false`.
+- Android should use `has_active_premium` for access decisions and
+  `premium_expires_at` for displaying an expiration date or countdown.
+- Neither field can be changed through registration, `PUT`, or `PATCH`.
+  Premium expiration is managed by trusted server-side code or Django admin.
+
+Example without premium:
+
+```json
+{
+  "premium_expires_at": null,
+  "has_active_premium": false
+}
+```
+
 ## 3. Authentication
 
 The backend uses JWT bearer authentication through Simple JWT. Access tokens
@@ -93,14 +124,15 @@ Response — `201 Created`:
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "Ada Lovelace",
   "email": "ada@example.com",
-  "premium_time_remaining": "00:00:00",
+  "premium_expires_at": null,
+  "has_active_premium": false,
   "avatar_url": "https://media.example.com/avatars/ada.jpg",
   "created_at": "2026-07-23T17:30:00Z",
   "updated_at": "2026-07-23T17:30:00Z"
 }
 ```
 
-`premium_time_remaining`, `id`, and timestamps are read-only.
+`premium_expires_at`, `has_active_premium`, `id`, and timestamps are read-only.
 
 ### 3.2 Log in and obtain tokens
 
@@ -188,7 +220,8 @@ Response — `200 OK`:
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Ada Lovelace",
     "email": "ada@example.com",
-    "premium_time_remaining": "00:00:00",
+    "premium_expires_at": null,
+    "has_active_premium": false,
     "avatar_url": "https://media.example.com/avatars/ada.jpg",
     "created_at": "2026-07-23T17:30:00Z",
     "updated_at": "2026-07-23T17:30:00Z"
@@ -276,7 +309,8 @@ or a staff user can update or delete a song.
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Ada Lovelace",
     "email": "ada@example.com",
-    "premium_time_remaining": "00:00:00",
+    "premium_expires_at": "2026-08-23T17:30:00Z",
+    "has_active_premium": true,
     "avatar_url": "https://media.example.com/avatars/ada.jpg",
     "created_at": "2026-07-23T17:30:00Z",
     "updated_at": "2026-07-23T17:30:00Z"
@@ -391,7 +425,8 @@ can update or delete a playlist.
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Ada Lovelace",
     "email": "ada@example.com",
-    "premium_time_remaining": "00:00:00",
+    "premium_expires_at": "2026-08-23T17:30:00Z",
+    "has_active_premium": true,
     "avatar_url": "https://media.example.com/avatars/ada.jpg",
     "created_at": "2026-07-23T17:30:00Z",
     "updated_at": "2026-07-23T17:30:00Z"

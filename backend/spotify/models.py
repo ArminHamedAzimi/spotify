@@ -7,6 +7,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 from .managers import UserManager
 
@@ -24,7 +25,7 @@ class User(AbstractUser):
     username = None
     name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
-    premium_time_remaining = models.DurationField(default=timedelta)
+    premium_expires_at = models.DateTimeField(null=True, blank=True)
     avatar_url = models.URLField(max_length=2048, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -37,10 +38,6 @@ class User(AbstractUser):
         ordering = ["-created_at"]
         constraints = [
             models.CheckConstraint(
-                condition=Q(premium_time_remaining__gte=timedelta(0)),
-                name="user_premium_time_non_negative",
-            ),
-            models.CheckConstraint(
                 condition=~Q(name=""),
                 name="user_name_not_empty",
             ),
@@ -48,6 +45,13 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+    @property
+    def has_active_premium(self) -> bool:
+        return (
+            self.premium_expires_at is not None
+            and self.premium_expires_at > timezone.now()
+        )
 
 
 class Song(TimeStampedModel):

@@ -8,12 +8,12 @@ from .models import Playlist, PlaylistFollow, Song, User
 class UserAdmin(DjangoUserAdmin):
     model = User
     ordering = ("email",)
-    list_display = ("email", "name", "is_staff", "is_active", "premium_time_remaining")
+    list_display = ("email", "name", "is_staff", "is_active", "premium_expires_at")
     list_filter = ("is_staff", "is_superuser", "is_active")
     search_fields = ("email", "name")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Profile", {"fields": ("name", "avatar_url", "premium_time_remaining")}),
+        ("Profile", {"fields": ("name", "avatar_url", "premium_expires_at")}),
         (
             "Permissions",
             {

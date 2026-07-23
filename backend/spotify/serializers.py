@@ -16,12 +16,19 @@ class UserSerializer(serializers.ModelSerializer):
             "name",
             "email",
             "password",
-            "premium_time_remaining",
+            "premium_expires_at",
+            "has_active_premium",
             "avatar_url",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "premium_time_remaining", "created_at", "updated_at")
+        read_only_fields = (
+            "id",
+            "premium_expires_at",
+            "has_active_premium",
+            "created_at",
+            "updated_at",
+        )
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)

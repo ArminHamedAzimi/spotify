@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework import status
@@ -28,8 +26,9 @@ class PlaylistFollowTests(TestCase):
         with self.assertRaises(ValidationError):
             PlaylistFollow.objects.create(user=self.owner, playlist=self.playlist)
 
-    def test_premium_time_defaults_to_zero(self):
-        self.assertEqual(self.owner.premium_time_remaining, timedelta(0))
+    def test_premium_expiration_defaults_to_none(self):
+        self.assertIsNone(self.owner.premium_expires_at)
+        self.assertFalse(self.owner.has_active_premium)
 
 
 class ApiAuthorizationTests(TestCase):

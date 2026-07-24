@@ -1,4 +1,5 @@
 from django.contrib.auth.password_validation import validate_password
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Playlist, PlaylistFollow, Song, User
@@ -95,6 +96,7 @@ class SongSerializer(serializers.ModelSerializer):
 class PlaylistSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     follower_count = serializers.IntegerField(read_only=True)
+    songs = serializers.SerializerMethodField()
 
     class Meta:
         model = Playlist
@@ -104,12 +106,41 @@ class PlaylistSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "is_public",
+            "is_liked",
             "songs",
             "follower_count",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "owner", "follower_count", "created_at", "updated_at")
+        read_only_fields = (
+            "id",
+            "owner",
+            "is_liked",
+            "songs",
+            "follower_count",
+            "created_at",
+            "updated_at",
+        )
+
+    @extend_schema_field(serializers.ListField(child=serializers.UUIDField()))
+    def get_songs(self, obj):
+        return [
+            str(entry.song_id)
+            for entry in obj.song_entries.all().order_by("position", "created_at")
+        ]
+
+
+class AddPlaylistSongSerializer(serializers.Serializer):
+    song_id = serializers.UUIDField()
+
+
+class PlaylistNextSongSerializer(serializers.Serializer):
+    song_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    shuffle = serializers.BooleanField(required=False, default=False)
+
+
+class RandomNextSongSerializer(serializers.Serializer):
+    song_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class PlaylistFollowSerializer(serializers.ModelSerializer):

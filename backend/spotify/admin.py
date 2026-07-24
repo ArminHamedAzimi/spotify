@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import Playlist, PlaylistFollow, Song, User
+from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
 
 
 @admin.register(User)
@@ -65,14 +65,21 @@ class PlaylistFollowInline(admin.TabularInline):
     autocomplete_fields = ("user",)
 
 
+class PlaylistSongInline(admin.TabularInline):
+    model = PlaylistSong
+    extra = 0
+    autocomplete_fields = ("song",)
+    ordering = ("position",)
+
+
 @admin.register(Playlist)
 class PlaylistAdmin(admin.ModelAdmin):
-    list_display = ("title", "owner", "is_public", "created_at")
-    list_filter = ("is_public", "created_at")
+    list_display = ("title", "owner", "is_public", "is_liked", "created_at")
+    list_filter = ("is_public", "is_liked", "created_at")
     search_fields = ("title", "owner__name", "owner__email")
-    autocomplete_fields = ("owner", "songs")
+    autocomplete_fields = ("owner",)
     readonly_fields = ("created_at", "updated_at")
-    inlines = (PlaylistFollowInline,)
+    inlines = (PlaylistSongInline, PlaylistFollowInline)
 
 
 @admin.register(PlaylistFollow)
@@ -80,4 +87,13 @@ class PlaylistFollowAdmin(admin.ModelAdmin):
     list_display = ("user", "playlist", "created_at")
     search_fields = ("user__email", "playlist__title")
     autocomplete_fields = ("user", "playlist")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(PlaylistSong)
+class PlaylistSongAdmin(admin.ModelAdmin):
+    list_display = ("playlist", "song", "position", "created_at")
+    search_fields = ("playlist__title", "song__title")
+    autocomplete_fields = ("playlist", "song")
+    ordering = ("playlist", "position")
     readonly_fields = ("created_at", "updated_at")

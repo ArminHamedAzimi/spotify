@@ -63,6 +63,16 @@ class AvatarUploadResponseSerializer(serializers.Serializer):
     avatar_url = serializers.URLField(read_only=True)
 
 
+class SubscriptionSerializer(serializers.Serializer):
+    months = serializers.ChoiceField(choices=(1, 3, 6, 12))
+
+
+class SubscriptionResponseSerializer(serializers.Serializer):
+    months_added = serializers.IntegerField(read_only=True)
+    premium_expires_at = serializers.DateTimeField(read_only=True)
+    has_active_premium = serializers.BooleanField(read_only=True)
+
+
 class SongSerializer(serializers.ModelSerializer):
     artist = UserSerializer(read_only=True)
 

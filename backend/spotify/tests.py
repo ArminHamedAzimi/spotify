@@ -1,9 +1,11 @@
 from io import BytesIO
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
+from django.utils import timezone
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -79,6 +81,29 @@ class ApiAuthorizationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], str(self.owner.pk))
         self.assertEqual(response.data["email"], self.owner.email)
+
+    def test_authenticated_user_can_add_subscription(self):
+        self.api_client.force_authenticate(user=self.owner)
+        before = timezone.now()
+        response = self.api_client.post(
+            "/api/users/subscription/",
+            {"months": 3},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["months_added"], 3)
+        self.assertTrue(response.data["has_active_premium"])
+        self.owner.refresh_from_db()
+        self.assertGreater(self.owner.premium_expires_at, before + timedelta(days=89))
+
+    def test_subscription_rejects_unsupported_duration(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.post(
+            "/api/users/subscription/",
+            {"months": 2},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_authenticated_user_can_follow_public_playlist(self):
         self.api_client.force_authenticate(user=self.other)

@@ -1,12 +1,16 @@
+import calendar
 import logging
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 from urllib.parse import quote
 
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.db import transaction
 from django.db.models import Count, Q
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -27,10 +31,20 @@ from .serializers import (
     PlaylistFollowSerializer,
     PlaylistSerializer,
     SongSerializer,
+    SubscriptionResponseSerializer,
+    SubscriptionSerializer,
     UserSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def add_calendar_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -105,6 +119,36 @@ class UserViewSet(viewsets.ModelViewSet):
         user.avatar_url = public_url
         user.save(update_fields=["avatar_url", "updated_at"])
         return Response({"avatar_url": public_url}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        request=SubscriptionSerializer,
+        responses={200: SubscriptionResponseSerializer},
+    )
+    @action(detail=False, methods=("post",), url_path="subscription")
+    def subscription(self, request):
+        serializer = SubscriptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        months = int(serializer.validated_data["months"])
+
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            now = timezone.now()
+            starts_at = (
+                user.premium_expires_at
+                if user.premium_expires_at and user.premium_expires_at > now
+                else now
+            )
+            user.premium_expires_at = add_calendar_months(starts_at, months)
+            user.save(update_fields=["premium_expires_at", "updated_at"])
+
+        return Response(
+            {
+                "months_added": months,
+                "premium_expires_at": user.premium_expires_at,
+                "has_active_premium": user.has_active_premium,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class SongViewSet(viewsets.ModelViewSet):

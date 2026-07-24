@@ -80,7 +80,8 @@ Every user object contains these two read-only fields:
 - Android should use `has_active_premium` for access decisions and
   `premium_expires_at` for displaying an expiration date or countdown.
 - Neither field can be changed through registration, `PUT`, or `PATCH`.
-  Premium expiration is managed by trusted server-side code or Django admin.
+  Premium is extended through `POST /api/users/subscription/`, trusted
+  server-side code, or Django admin.
 
 Example without premium:
 
@@ -418,6 +419,63 @@ Example validation error — `400 Bad Request`:
 
 An unsupported or invalid image also returns `400`. Missing or invalid JWT
 authentication returns `401 Unauthorized`.
+
+### 4.8 Add or extend a subscription
+
+```http
+POST /api/users/subscription/
+```
+
+Adds a subscription period to the user identified by the JWT. No user UUID is
+accepted, so an authenticated client can modify only its own subscription.
+
+Request JSON:
+
+```json
+{
+  "months": 3
+}
+```
+
+`months` is required and accepts only these integer values:
+
+- `1`
+- `3`
+- `6`
+- `12`
+
+Response — `200 OK`:
+
+```json
+{
+  "months_added": 3,
+  "premium_expires_at": "2026-10-24T12:30:00Z",
+  "has_active_premium": true
+}
+```
+
+If the user already has active premium, the selected number of calendar months
+is added to the existing `premium_expires_at`. If premium is absent or expired,
+the period begins at the server's current time. Calendar-month arithmetic is
+used, so adding one month to January 31 expires on the last valid day of
+February.
+
+Invalid duration example — `400 Bad Request`:
+
+```json
+{
+  "months": [
+    "\"2\" is not a valid choice."
+  ]
+}
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
+
+> Security note: this endpoint currently grants premium immediately and does
+> not verify a payment receipt. Before production release, call this operation
+> only after server-side Google Play purchase verification, or restrict it to
+> a trusted payment webhook/admin workflow.
 
 ## 5. Song APIs
 

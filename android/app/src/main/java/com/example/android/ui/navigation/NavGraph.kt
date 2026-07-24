@@ -19,7 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -38,6 +41,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.android.ui.components.AppTopBar
 import com.example.android.ui.components.MiniPlayer
 import com.example.android.ui.screens.downloads.DownloadsScreen
+import com.example.android.ui.screens.downloads.DownloadsViewModel
 import com.example.android.ui.screens.home.HomeScreen
 import com.example.android.ui.screens.home.HomeEvent
 import com.example.android.ui.screens.home.HomeViewModel
@@ -56,6 +60,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.playback.PlaybackViewModel
 import com.example.android.ui.theme.PlayerVisuals
+import androidx.paging.compose.collectAsLazyPagingItems
 
 @Composable
 fun SpotifyNavGraph(
@@ -68,9 +73,15 @@ fun SpotifyNavGraph(
     val profileViewModel: ProfileViewModel = koinViewModel()
     val homeViewModel: HomeViewModel = koinViewModel()
     val playbackViewModel: PlaybackViewModel = koinViewModel()
+    val downloadsViewModel: DownloadsViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+    val pagedDownloads = downloadsViewModel.pagedSongs.collectAsLazyPagingItems()
     LaunchedEffect(profileState.user?.id) {
+        val userId = profileState.user?.id
+        playbackViewModel.setActiveUser(userId)
+        downloadsViewModel.setActiveUser(userId)
         if (profileState.user != null) {
             homeViewModel.onEvent(HomeEvent.Refresh)
         }
@@ -97,7 +108,15 @@ fun SpotifyNavGraph(
             }
         },
         bottomBar = {
-            if (isMainDestination) {
+            AnimatedVisibility(
+                visible = isMainDestination,
+                enter = fadeIn(
+                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                ),
+                exit = fadeOut(
+                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                )
+            ) {
                 Column {
                     if (playbackState.hasMedia) {
                         MiniPlayer(
@@ -135,7 +154,14 @@ fun SpotifyNavGraph(
                 )
             }
             composable(Screen.Search.route) { SearchScreen() }
-            composable(Screen.Downloads.route) { DownloadsScreen() }
+            composable(Screen.Downloads.route) {
+                DownloadsScreen(
+                    songs = pagedDownloads,
+                    isPremium = profileState.user?.hasActivePremium == true,
+                    onSongClick = playbackViewModel::play,
+                    onRemoveSong = downloadsViewModel::removeDownload
+                )
+            }
             composable(Screen.Playlists.route) { PlaylistsScreen() }
             composable(Screen.Profile.route) {
                 ProfileScreen(profileViewModel = profileViewModel)
@@ -174,6 +200,18 @@ fun SpotifyNavGraph(
                     onSeek = playbackViewModel::seekTo,
                     onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
+                    isDownloaded = downloadsState.songs.any {
+                        it.id == playbackState.mediaId
+                    },
+                    isDownloading = playbackState.mediaId in downloadsState.activeDownloadIds,
+                    downloadMessageRes = downloadsState.messageRes,
+                    onDownload = {
+                        downloadsViewModel.download(
+                            playbackState,
+                            profileState.user?.id,
+                            profileState.user?.hasActivePremium == true
+                        )
+                    },
                     onDismiss = { navController.popBackStack() }
                 )
             }

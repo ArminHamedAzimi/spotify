@@ -86,4 +86,17 @@
     <string name="sleep_timer_off">Off</string>
     <string name="sleep_timer_minutes">%1$d minutes</string>
     <string name="sleep_timer_active">%1$d min</string>
+    <string name="download_song">Download song</string>
+    <string name="downloading">Downloading…</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="download_started">Download started. The song and cover will be saved for offline playback.</string>
+    <string name="download_complete">Song and cover downloaded successfully.</string>
+    <string name="download_failed">The song could not be downloaded.</string>
+    <string name="download_already_available">This song is already available offline.</string>
+    <string name="download_premium_required">Offline downloads require Premium. Upgrade your account to download this song.</string>
+    <string name="downloads_empty">Your downloaded songs will appear here.</string>
+    <string name="downloaded_songs">Downloaded songs</string>
+    <string name="download_playback_premium_required">Your downloads are saved, but playback from this tab requires an active Premium subscription.</string>
+    <string name="remove_download">Remove download</string>
+    <string name="download_removed">The offline song and cover were removed from this device.</string>
 </resources>

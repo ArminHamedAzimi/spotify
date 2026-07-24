@@ -27,6 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -36,6 +38,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +69,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.core.graphics.drawable.toBitmap
@@ -91,6 +95,10 @@ fun PlayerScreen(
     onSeek: (Long) -> Unit,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSleepTimerChange: (Int?) -> Unit,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    @StringRes downloadMessageRes: Int?,
+    onDownload: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val fallbackPrimary = MaterialTheme.colorScheme.primaryContainer
@@ -233,7 +241,11 @@ fun PlayerScreen(
             playbackSpeed = state.playbackSpeed,
             sleepTimerMinutes = state.sleepTimerMinutes,
             onPlaybackSpeedChange = onPlaybackSpeedChange,
-            onOpenSleepTimer = { showSleepTimer = true }
+            onOpenSleepTimer = { showSleepTimer = true },
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            downloadMessageRes = downloadMessageRes,
+            onDownload = onDownload
         )
     }
 }
@@ -413,13 +425,50 @@ private fun PlayerOptions(
     playbackSpeed: Float,
     sleepTimerMinutes: Int?,
     onPlaybackSpeedChange: (Float) -> Unit,
-    onOpenSleepTimer: () -> Unit
+    onOpenSleepTimer: () -> Unit,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    @StringRes downloadMessageRes: Int?,
+    onDownload: () -> Unit
 ) {
     HorizontalDivider()
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
     ) {
+        FilledTonalButton(
+            onClick = onDownload,
+            enabled = !isDownloaded && !isDownloading
+        ) {
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(AppDimens.actionIconSize),
+                    strokeWidth = AppDimens.borderWidth
+                )
+            } else {
+                Icon(
+                    if (isDownloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                    contentDescription = null
+                )
+            }
+            Text(
+                text = stringResource(
+                    when {
+                        isDownloaded -> R.string.downloaded
+                        isDownloading -> R.string.downloading
+                        else -> R.string.download_song
+                    }
+                ),
+                modifier = Modifier.padding(start = AppDimens.spaceSmall)
+            )
+        }
+        downloadMessageRes?.let {
+            Text(
+                text = stringResource(it),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Text(
             text = stringResource(R.string.playback_speed),
             style = MaterialTheme.typography.titleMedium

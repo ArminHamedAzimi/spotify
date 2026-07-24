@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -69,27 +68,12 @@ fun MiniPlayer(
             } else {
                 0f
             }
-            val bufferedProgress = if (state.durationMillis > 0L) {
-                state.bufferedPositionMillis.toFloat() / state.durationMillis.toFloat()
-            } else {
-                0f
-            }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                LinearProgressIndicator(
-                    progress = { bufferedProgress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = com.example.android.ui.theme.PlayerVisuals.bufferedTrackAlpha
-                    ),
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-                LinearProgressIndicator(
-                    progress = { progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = androidx.compose.ui.graphics.Color.Transparent
-                )
-            }
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

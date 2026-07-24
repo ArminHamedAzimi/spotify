@@ -44,7 +44,6 @@ object AppDimens {
     val playerDiscCoverSize = 248.dp
     val playerDiscHoleSize = 42.dp
     val playerVisualizerHeight = 64.dp
-    val playerBufferedTrackHeight = 4.dp
     val playerSwipeThreshold = 72.dp
     val playerMainControlSize = 64.dp
     val playerSecondaryControlSize = 48.dp

@@ -43,7 +43,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -348,36 +347,12 @@ private fun AudioVisualizer(isPlaying: Boolean) {
 @Composable
 private fun PlaybackProgress(state: PlaybackUiState, onSeek: (Long) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        val bufferedProgress = if (state.durationMillis > 0L) {
-            state.bufferedPositionMillis.toFloat() / state.durationMillis.toFloat()
-        } else {
-            0f
-        }
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { bufferedProgress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(AppDimens.playerBufferedTrackHeight),
-                color = MaterialTheme.colorScheme.primary.copy(
-                    alpha = PlayerVisuals.bufferedTrackAlpha
-                ),
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-            Slider(
-                value = state.positionMillis.toFloat(),
-                onValueChange = { onSeek(it.toLong()) },
-                valueRange = 0f..state.durationMillis.coerceAtLeast(1L).toFloat(),
-                enabled = state.durationMillis > 0L,
-                colors = SliderDefaults.colors(
-                    inactiveTrackColor = Color.Transparent,
-                    disabledInactiveTrackColor = Color.Transparent
-                )
-            )
-        }
+        Slider(
+            value = state.positionMillis.toFloat(),
+            onValueChange = { onSeek(it.toLong()) },
+            valueRange = 0f..state.durationMillis.coerceAtLeast(1L).toFloat(),
+            enabled = state.durationMillis > 0L
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween

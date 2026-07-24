@@ -6,7 +6,6 @@ object PlayerVisuals {
     const val gradientSoftAlpha = 0.18f
     const val gradientAnimationDurationMillis = 700
     const val navigationAnimationDurationMillis = 420
-    const val bufferedTrackAlpha = 0.38f
     const val discRotationDegrees = 360f
     const val discRotationDurationMillis = 12_000
     const val visualizerDurationMillis = 900

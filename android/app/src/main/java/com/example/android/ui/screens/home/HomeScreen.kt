@@ -1,6 +1,9 @@
 package com.example.android.ui.screens.home
 
+import android.graphics.Bitmap
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,18 +35,33 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.graphics.drawable.toBitmap
+import androidx.palette.graphics.Palette
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.imageLoader
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.example.android.R
 import com.example.android.domain.home.Song
 import com.example.android.ui.theme.AppDimens
+import com.example.android.ui.theme.PlayerVisuals
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -119,6 +137,47 @@ private fun FeaturedCarousel(songs: List<Song>, onSongClick: (Song) -> Unit) {
 
 @Composable
 private fun FeaturedSong(song: Song, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val fallbackBackground = MaterialTheme.colorScheme.primaryContainer
+    val fallbackContent = MaterialTheme.colorScheme.onPrimaryContainer
+    var featuredPalette by remember(song.coverImageUrl) {
+        mutableStateOf(
+            FeaturedPalette(
+                background = fallbackBackground,
+                content = fallbackContent
+            )
+        )
+    }
+    val backgroundColor by animateColorAsState(
+        targetValue = featuredPalette.background,
+        animationSpec = tween(PlayerVisuals.gradientAnimationDurationMillis),
+        label = "featuredBackground"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = featuredPalette.content,
+        animationSpec = tween(PlayerVisuals.gradientAnimationDurationMillis),
+        label = "featuredContent"
+    )
+    LaunchedEffect(song.coverImageUrl) {
+        val request = ImageRequest.Builder(context)
+            .data(song.coverImageUrl)
+            .allowHardware(false)
+            .build()
+        val result = context.imageLoader.execute(request) as? SuccessResult
+            ?: return@LaunchedEffect
+        featuredPalette = withContext(Dispatchers.Default) {
+            runCatching {
+                val bitmap = result.drawable.toBitmap(config = Bitmap.Config.ARGB_8888)
+                val swatch = Palette.from(bitmap).generate().dominantSwatch
+                FeaturedPalette(
+                    background = Color(swatch?.rgb ?: fallbackBackground.toArgb()),
+                    content = Color(swatch?.titleTextColor ?: fallbackContent.toArgb())
+                )
+            }.getOrDefault(
+                FeaturedPalette(fallbackBackground, fallbackContent)
+            )
+        }
+    }
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -126,7 +185,7 @@ private fun FeaturedSong(song: Song, onClick: () -> Unit) {
             .height(AppDimens.homeHeroHeight),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = backgroundColor
         )
     ) {
         Row {
@@ -145,18 +204,24 @@ private fun FeaturedSong(song: Song, onClick: () -> Unit) {
                 Text(
                     text = song.title,
                     style = MaterialTheme.typography.titleLarge,
+                    color = contentColor,
                     maxLines = TITLE_MAX_LINES
                 )
                 Text(
                     text = song.artistName,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = contentColor,
                     maxLines = ARTIST_MAX_LINES
                 )
             }
         }
     }
 }
+
+private data class FeaturedPalette(
+    val background: Color,
+    val content: Color
+)
 
 @Composable
 private fun FeaturedPlaceholder() {

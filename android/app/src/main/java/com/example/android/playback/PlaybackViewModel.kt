@@ -36,7 +36,6 @@ data class PlaybackUiState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMillis: Long = 0L,
-    val bufferedPositionMillis: Long = 0L,
     val durationMillis: Long = 0L,
     val playbackSpeed: Float = PlaybackConfig.playbackSpeeds.first(),
     val sleepTimerMinutes: Int? = null
@@ -180,7 +179,6 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             isPlaying = player.isPlaying,
             isBuffering = player.playbackState == Player.STATE_BUFFERING,
             positionMillis = player.currentPosition.coerceAtLeast(0L),
-            bufferedPositionMillis = player.bufferedPosition.coerceAtLeast(0L),
             durationMillis = duration,
             playbackSpeed = player.playbackParameters.speed,
             sleepTimerMinutes = selectedSleepTimerMinutes

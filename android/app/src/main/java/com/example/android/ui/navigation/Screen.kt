@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.android.R
 
@@ -24,6 +25,7 @@ sealed class Screen(
     data object Profile : Screen("profile", R.string.tab_profile, Icons.Filled.Person)
     data object Notifications : Screen("notifications", R.string.notifications, Icons.Filled.Notifications)
     data object Settings : Screen("settings", R.string.settings, Icons.Filled.Settings)
+    data object Player : Screen("player", R.string.player, Icons.Filled.PlayCircle)
 }
 
 val bottomNavItems = listOf(

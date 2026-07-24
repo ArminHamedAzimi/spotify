@@ -522,7 +522,57 @@ GET /api/songs/
 
 Response — `200 OK`: an array of accessible song objects.
 
-### 5.2 Create a song
+### 5.2 Get the 10 most recently added songs
+
+```http
+GET /api/songs/recent/
+```
+
+Returns at most 10 accessible songs ordered by `created_at` descending, so the
+newest song is the first array element. The endpoint requires a JWT access
+token and accepts no request body or query parameters.
+
+It follows the normal song visibility rules:
+
+- Regular users receive published songs and their own unpublished songs.
+- Staff/admin users can receive all songs.
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+    "title": "Newest Song",
+    "artist": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Ada Lovelace",
+      "email": "ada@example.com",
+      "premium_expires_at": null,
+      "has_active_premium": false,
+      "avatar_url": "https://media.example.com/avatars/ada.jpg",
+      "created_at": "2026-07-23T17:30:00Z",
+      "updated_at": "2026-07-23T17:30:00Z"
+    },
+    "cover_image_url": "https://media.example.com/covers/newest.jpg",
+    "audio_url": "https://media.example.com/audio/newest.mp3",
+    "duration": "00:03:42",
+    "is_published": true,
+    "created_at": "2026-07-24T09:00:00Z",
+    "updated_at": "2026-07-24T09:00:00Z"
+  }
+]
+```
+
+If no accessible songs exist, the response is an empty array:
+
+```json
+[]
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
+
+### 5.3 Create a song
 
 ```http
 POST /api/songs/
@@ -542,7 +592,7 @@ Request:
 
 Response — `201 Created`: the complete song object.
 
-### 5.3 Get one song
+### 5.4 Get one song
 
 ```http
 GET /api/songs/{id}/
@@ -550,7 +600,7 @@ GET /api/songs/{id}/
 
 `{id}` is the song UUID. Response — `200 OK`: one complete song object.
 
-### 5.4 Replace a song
+### 5.5 Replace a song
 
 ```http
 PUT /api/songs/{id}/
@@ -570,7 +620,7 @@ Request uses the same writable fields as song creation:
 
 Response — `200 OK`: the updated song.
 
-### 5.5 Partially update a song
+### 5.6 Partially update a song
 
 ```http
 PATCH /api/songs/{id}/
@@ -586,7 +636,7 @@ Example:
 
 Response — `200 OK`: the updated song.
 
-### 5.6 Delete a song
+### 5.7 Delete a song
 
 ```http
 DELETE /api/songs/{id}/

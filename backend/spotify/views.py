@@ -167,6 +167,15 @@ class SongViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(artist=cast(User, self.request.user))
 
+    @extend_schema(responses={200: SongSerializer(many=True)})
+    @action(detail=False, methods=("get",), url_path="recent")
+    def recent(self, request):
+        songs = self.get_queryset().order_by("-created_at")[:10]
+        return Response(
+            self.get_serializer(songs, many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 class PlaylistViewSet(viewsets.ModelViewSet):
     queryset = Playlist.objects.select_related("owner").prefetch_related("songs")

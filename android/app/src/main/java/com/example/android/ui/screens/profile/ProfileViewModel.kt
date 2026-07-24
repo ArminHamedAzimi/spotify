@@ -20,8 +20,10 @@ data class ProfileUiState(
     val errorRes: Int? = null
 )
 
-class ProfileViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = ProfileRepository(application)
+class ProfileViewModel(
+    application: Application,
+    private val repository: ProfileRepository
+) : AndroidViewModel(application) {
 
     var uiState = androidx.compose.runtime.mutableStateOf(ProfileUiState())
         private set

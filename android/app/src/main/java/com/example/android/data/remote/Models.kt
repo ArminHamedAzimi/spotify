@@ -34,3 +34,13 @@ data class SubscriptionResponse(
     @SerializedName("premium_expires_at") val premiumExpiresAt: String,
     @SerializedName("has_active_premium") val hasActivePremium: Boolean
 )
+
+data class SongDto(
+    val id: String,
+    val title: String,
+    val artist: UserDto,
+    @SerializedName("cover_image_url") val coverImageUrl: String,
+    @SerializedName("audio_url") val audioUrl: String,
+    val duration: String?,
+    @SerializedName("is_published") val isPublished: Boolean
+)

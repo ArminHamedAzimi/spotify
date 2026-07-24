@@ -41,6 +41,7 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
     }
     fun addSong(playlistId: String, songId: String) = viewModelScope.launch {
         runCatching { repository.addSong(playlistId, songId) }
+            .onSuccess { refresh() }
     }
 
     fun removeSong(playlistId: String, songId: String) = viewModelScope.launch {

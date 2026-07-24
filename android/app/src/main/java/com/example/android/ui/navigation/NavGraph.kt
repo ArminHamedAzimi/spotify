@@ -94,11 +94,13 @@ fun SpotifyNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
     val isMainDestination = bottomNavItems.any { it.route == currentRoute }
+    val isPlaylistDetail = currentRoute == Screen.PlaylistDetail.route
+    val showAppBottomBar = isMainDestination || isPlaylistDetail
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (currentRoute != Screen.Player.route) {
+            if (currentRoute != Screen.Player.route && !isPlaylistDetail) {
                 AppTopBar(
                     isMainDestination = isMainDestination,
                     titleRes = when (currentRoute) {
@@ -114,7 +116,7 @@ fun SpotifyNavGraph(
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = isMainDestination,
+                visible = showAppBottomBar,
                 enter = fadeIn(
                     animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
                 ),
@@ -131,7 +133,7 @@ fun SpotifyNavGraph(
                         )
                     }
                     MelodifyBottomBar(
-                        currentRoute = currentRoute,
+                        currentRoute = if (isPlaylistDetail) Screen.Playlists.route else currentRoute,
                         user = profileState.user,
                         onNavigate = { screen ->
                             navController.navigate(screen.route) {
@@ -185,7 +187,8 @@ fun SpotifyNavGraph(
                     playlistsState,
                     playbackViewModel::playFromPlaylist,
                     playbackViewModel::startPlaylist,
-                    playlistsViewModel::removeSong
+                    playlistsViewModel::removeSong,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(Screen.Profile.route) {
@@ -230,10 +233,7 @@ fun SpotifyNavGraph(
                     onCreatePlaylist = playlistsViewModel::create,
                     onNext = playbackViewModel::next,
                     onPrevious = playbackViewModel::previous,
-                    onShuffleChange = { enabled ->
-                        if (enabled) playbackViewModel.shuffleNext()
-                        else playbackViewModel.setShuffle(false)
-                    },
+                    onShuffleChange = playbackViewModel::setShuffle,
                     isDownloaded = downloadsState.songs.any {
                         it.id == playbackState.mediaId
                     },

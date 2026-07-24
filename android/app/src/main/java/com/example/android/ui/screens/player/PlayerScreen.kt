@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -47,6 +49,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
@@ -162,31 +165,114 @@ fun PlayerScreen(
     }
     var showSleepTimer by remember { mutableStateOf(false) }
     var showPlaylists by remember { mutableStateOf(false) }
-    var shuffle by remember { mutableStateOf(false) }
+    var creatingPlaylist by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
     if (showPlaylists) {
         ModalBottomSheet(onDismissRequest = { showPlaylists = false }) {
-            Column(Modifier.padding(AppDimens.spaceLarge)) {
-                Text(stringResource(R.string.add_to_playlist), style = MaterialTheme.typography.headlineSmall)
-                OutlinedTextField(
-                    value = newPlaylistTitle,
-                    onValueChange = { newPlaylistTitle = it },
-                    label = { Text(stringResource(R.string.new_playlist)) }
-                )
-                Button(
-                    onClick = {
-                        onCreatePlaylist(newPlaylistTitle) { newPlaylistTitle = "" }
-                    },
-                    enabled = newPlaylistTitle.isNotBlank()
-                ) { Text(stringResource(R.string.create)) }
+            Column(
+                modifier = Modifier.padding(AppDimens.spaceLarge),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+            ) {
                 playlists.forEach { playlist ->
-                    ListItem(
-                        headlineContent = { Text(playlist.title) },
-                        modifier = Modifier.clickable {
-                            state.mediaId?.let { onAddToPlaylist(playlist.id, it) }
-                            showPlaylists = false
+                    val containsSong = state.mediaId in playlist.songs
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !containsSong) {
+                                state.mediaId?.let { onAddToPlaylist(playlist.id, it) }
+                            },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(AppDimens.spaceSmall),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(AppDimens.miniPlayerArtworkSize),
+                                shape = MaterialTheme.shapes.small,
+                                color = if (playlist.isLiked) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (playlist.isLiked) Icons.Rounded.Favorite
+                                        else Icons.Rounded.MusicNote,
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                            Text(
+                                playlist.title,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            if (containsSong) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.padding(AppDimens.spaceSmall)
+                                    )
+                                }
+                            }
                         }
+                    }
+                }
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { creatingPlaylist = true },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Row(
+                        modifier = Modifier.padding(AppDimens.spaceSmall),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(AppDimens.miniPlayerArtworkSize),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Add, contentDescription = null)
+                            }
+                        }
+                        Text(
+                            stringResource(R.string.new_playlist),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                }
+                if (creatingPlaylist) {
+                    OutlinedTextField(
+                        value = newPlaylistTitle,
+                        onValueChange = { newPlaylistTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.new_playlist)) },
+                        singleLine = true
                     )
+                    Button(
+                        onClick = {
+                            onCreatePlaylist(newPlaylistTitle) {
+                                newPlaylistTitle = ""
+                                creatingPlaylist = false
+                            }
+                        },
+                        enabled = newPlaylistTitle.isNotBlank()
+                    ) {
+                        Text(stringResource(R.string.create))
+                    }
                 }
             }
         }
@@ -285,10 +371,9 @@ fun PlayerScreen(
             onTogglePlayPause = onTogglePlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
-            shuffle = shuffle,
+            shuffle = state.isShuffleEnabled,
             onShuffle = {
-                shuffle = !shuffle
-                onShuffleChange(shuffle)
+                onShuffleChange(!state.isShuffleEnabled)
             },
             onAdd = { showPlaylists = true }
         )
@@ -447,9 +532,22 @@ private fun PlaybackControls(
     onAdd: () -> Unit
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)) {
-        IconButton(onClick = onShuffle) {
-            Icon(Icons.Rounded.Shuffle, stringResource(R.string.shuffle),
-                tint = if (shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        FilledIconButton(
+            onClick = onShuffle,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = if (shuffle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                contentColor = if (shuffle) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        ) {
+            Icon(Icons.Rounded.Shuffle, stringResource(R.string.shuffle))
         }
         IconButton(onClick = onAdd) {
             Icon(Icons.Rounded.Add, stringResource(R.string.add_to_playlist))

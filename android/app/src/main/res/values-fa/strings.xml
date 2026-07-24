@@ -77,4 +77,13 @@
     <string name="pause">توقف</string>
     <string name="previous_song">آهنگ قبلی</string>
     <string name="next_song">آهنگ بعدی</string>
+    <string name="playback_speed">سرعت پخش</string>
+    <string name="speed_one">۱×</string>
+    <string name="speed_one_half">۱٫۵×</string>
+    <string name="speed_two">۲×</string>
+    <string name="sleep_timer">تایمر خواب</string>
+    <string name="sleep_timer_description">پخش پس از زمان انتخاب‌شده به‌صورت خودکار متوقف می‌شود.</string>
+    <string name="sleep_timer_off">خاموش</string>
+    <string name="sleep_timer_minutes">%1$d دقیقه</string>
+    <string name="sleep_timer_active">%1$d دقیقه</string>
 </resources>

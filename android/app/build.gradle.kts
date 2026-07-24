@@ -57,6 +57,7 @@ dependencies {
     implementation("io.insert-koin:koin-androidx-compose:4.0.4")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-session:1.10.1")
+    implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("androidx.compose.material:material-icons-extended-android:1.7.6")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

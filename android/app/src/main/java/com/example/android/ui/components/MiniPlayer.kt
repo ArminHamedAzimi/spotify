@@ -1,8 +1,10 @@
 package com.example.android.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.R
@@ -38,7 +42,24 @@ fun MiniPlayer(
     onOpenPlayer: () -> Unit,
     onTogglePlayPause: () -> Unit
 ) {
+    val swipeThreshold = with(LocalDensity.current) {
+        AppDimens.playerSwipeThreshold.toPx()
+    }
     Surface(
+        modifier = Modifier.pointerInput(onOpenPlayer, swipeThreshold) {
+            var accumulatedDrag = 0f
+            detectVerticalDragGestures(
+                onVerticalDrag = { change, dragAmount ->
+                    change.consume()
+                    accumulatedDrag += dragAmount
+                },
+                onDragEnd = {
+                    if (accumulatedDrag <= -swipeThreshold) onOpenPlayer()
+                    accumulatedDrag = 0f
+                },
+                onDragCancel = { accumulatedDrag = 0f }
+            )
+        },
         color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = AppDimens.cardElevation
     ) {
@@ -48,12 +69,27 @@ fun MiniPlayer(
             } else {
                 0f
             }
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            val bufferedProgress = if (state.durationMillis > 0L) {
+                state.bufferedPositionMillis.toFloat() / state.durationMillis.toFloat()
+            } else {
+                0f
+            }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                LinearProgressIndicator(
+                    progress = { bufferedProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = com.example.android.ui.theme.PlayerVisuals.bufferedTrackAlpha
+                    ),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = androidx.compose.ui.graphics.Color.Transparent
+                )
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

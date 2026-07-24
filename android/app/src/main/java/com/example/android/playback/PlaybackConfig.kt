@@ -6,4 +6,7 @@ object PlaybackConfig {
     const val progressUpdateMillis = 500L
     const val fullVolume = 1f
     const val silentVolume = 0f
+    const val millisPerMinute = 60_000L
+    val playbackSpeeds = listOf(1f, 1.5f, 2f)
+    val sleepTimerMinutes = listOf(15, 30, 45, 60)
 }

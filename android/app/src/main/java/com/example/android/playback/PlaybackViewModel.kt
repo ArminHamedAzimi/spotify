@@ -36,7 +36,10 @@ data class PlaybackUiState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMillis: Long = 0L,
-    val durationMillis: Long = 0L
+    val bufferedPositionMillis: Long = 0L,
+    val durationMillis: Long = 0L,
+    val playbackSpeed: Float = PlaybackConfig.playbackSpeeds.first(),
+    val sleepTimerMinutes: Int? = null
 ) {
     val hasMedia: Boolean get() = mediaId != null
 }
@@ -45,6 +48,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
     private var progressJob: Job? = null
+    private var sleepTimerJob: Job? = null
+    private var selectedSleepTimerMinutes: Int? = null
 
     private val _uiState = MutableStateFlow(PlaybackUiState())
     val uiState: StateFlow<PlaybackUiState> = _uiState.asStateFlow()
@@ -120,8 +125,29 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         controller?.seekTo(positionMillis)
     }
 
+    fun setPlaybackSpeed(speed: Float) {
+        if (speed !in PlaybackConfig.playbackSpeeds) return
+        controller?.setPlaybackSpeed(speed)
+        _uiState.update { it.copy(playbackSpeed = speed) }
+    }
+
+    fun setSleepTimer(minutes: Int?) {
+        if (minutes != null && minutes !in PlaybackConfig.sleepTimerMinutes) return
+        sleepTimerJob?.cancel()
+        selectedSleepTimerMinutes = minutes
+        _uiState.update { it.copy(sleepTimerMinutes = minutes) }
+        if (minutes == null) return
+        sleepTimerJob = viewModelScope.launch {
+            delay(minutes * PlaybackConfig.millisPerMinute)
+            controller?.pause()
+            selectedSleepTimerMinutes = null
+            _uiState.update { it.copy(sleepTimerMinutes = null) }
+        }
+    }
+
     override fun onCleared() {
         progressJob?.cancel()
+        sleepTimerJob?.cancel()
         controller?.removeListener(listener)
         MediaController.releaseFuture(controllerFuture)
         controller = null
@@ -154,7 +180,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             isPlaying = player.isPlaying,
             isBuffering = player.playbackState == Player.STATE_BUFFERING,
             positionMillis = player.currentPosition.coerceAtLeast(0L),
-            durationMillis = duration
+            bufferedPositionMillis = player.bufferedPosition.coerceAtLeast(0L),
+            durationMillis = duration,
+            playbackSpeed = player.playbackParameters.speed,
+            sleepTimerMinutes = selectedSleepTimerMinutes
         )
     }
 

@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -53,6 +55,7 @@ import com.example.android.data.remote.UserDto
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.playback.PlaybackViewModel
+import com.example.android.ui.theme.PlayerVisuals
 
 @Composable
 fun SpotifyNavGraph(
@@ -79,18 +82,19 @@ fun SpotifyNavGraph(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AppTopBar(
-                isMainDestination = isMainDestination,
-                titleRes = when (currentRoute) {
-                    Screen.Notifications.route -> Screen.Notifications.titleRes
-                    Screen.Settings.route -> Screen.Settings.titleRes
-                    Screen.Player.route -> Screen.Player.titleRes
-                    else -> null
-                },
-                onBackClick = { navController.popBackStack() },
-                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onSettingsClick = { navController.navigate(Screen.Settings.route) }
-            )
+            if (currentRoute != Screen.Player.route) {
+                AppTopBar(
+                    isMainDestination = isMainDestination,
+                    titleRes = when (currentRoute) {
+                        Screen.Notifications.route -> Screen.Notifications.titleRes
+                        Screen.Settings.route -> Screen.Settings.titleRes
+                        else -> null
+                    },
+                    onBackClick = { navController.popBackStack() },
+                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                    onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                )
+            }
         },
         bottomBar = {
             if (isMainDestination) {
@@ -145,11 +149,32 @@ fun SpotifyNavGraph(
                     onLanguageChange = onLanguageChange
                 )
             }
-            composable(Screen.Player.route) {
+            composable(
+                route = Screen.Player.route,
+                enterTransition = {
+                    slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Up,
+                        animationSpec = tween(
+                            PlayerVisuals.navigationAnimationDurationMillis
+                        )
+                    )
+                },
+                popExitTransition = {
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Down,
+                        animationSpec = tween(
+                            PlayerVisuals.navigationAnimationDurationMillis
+                        )
+                    )
+                }
+            ) {
                 PlayerScreen(
                     state = playbackState,
                     onTogglePlayPause = playbackViewModel::togglePlayPause,
-                    onSeek = playbackViewModel::seekTo
+                    onSeek = playbackViewModel::seekTo,
+                    onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
+                    onSleepTimerChange = playbackViewModel::setSleepTimer,
+                    onDismiss = { navController.popBackStack() }
                 )
             }
         }

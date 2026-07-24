@@ -97,4 +97,6 @@
     <string name="downloads_empty">آهنگ‌های دانلودشده شما اینجا نمایش داده می‌شوند.</string>
     <string name="downloaded_songs">آهنگ‌های دانلودشده</string>
     <string name="download_playback_premium_required">دانلودهای شما ذخیره هستند، اما پخش از این بخش به اشتراک فعال پریمیوم نیاز دارد.</string>
+    <string name="remove_download">حذف دانلود</string>
+    <string name="download_removed">آهنگ و کاور آفلاین از این دستگاه حذف شدند.</string>
 </resources>

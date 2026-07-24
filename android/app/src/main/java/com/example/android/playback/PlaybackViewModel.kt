@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.app.Application
 import android.content.ComponentName
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -88,33 +89,39 @@ class PlaybackViewModel(
         val activeController = controller ?: return
         val playableSong = downloads.resolve(song, activeUserId)
         viewModelScope.launch {
-            if (
-                activeController.currentMediaItem?.mediaId == playableSong.id &&
-                activeController.currentMediaItem?.localConfiguration?.uri?.toString() ==
-                playableSong.audioUrl
-            ) {
-                if (activeController.playbackState == Player.STATE_ENDED) {
-                    activeController.seekToDefaultPosition()
+            try {
+                if (
+                    activeController.currentMediaItem?.mediaId == playableSong.id &&
+                    activeController.currentMediaItem?.localConfiguration?.uri?.toString() ==
+                    playableSong.audioUrl
+                ) {
+                    if (activeController.playbackState == Player.STATE_ENDED) {
+                        activeController.seekToDefaultPosition()
+                    }
+                    activeController.play()
+                    return@launch
                 }
+                if (activeController.currentMediaItem != null) {
+                    animateVolume(
+                        activeController,
+                        activeController.volume,
+                        PlaybackConfig.silentVolume
+                    )
+                }
+                activeController.setMediaItem(playableSong.toMediaItem())
+                activeController.prepare()
+                activeController.volume = PlaybackConfig.silentVolume
                 activeController.play()
-                return@launch
-            }
-            if (activeController.currentMediaItem != null) {
                 animateVolume(
                     activeController,
-                    activeController.volume,
-                    PlaybackConfig.silentVolume
+                    PlaybackConfig.silentVolume,
+                    PlaybackConfig.fullVolume
                 )
+            } catch (error: Exception) {
+                activeController.volume = PlaybackConfig.fullVolume
+                Log.e(PLAYBACK_LOG_TAG, "Unable to start selected song", error)
+                updateState(activeController)
             }
-            activeController.setMediaItem(playableSong.toMediaItem())
-            activeController.prepare()
-            activeController.volume = PlaybackConfig.silentVolume
-            activeController.play()
-            animateVolume(
-                activeController,
-                PlaybackConfig.silentVolume,
-                PlaybackConfig.fullVolume
-            )
         }
     }
 
@@ -238,3 +245,5 @@ class PlaybackViewModel(
         continuation.invokeOnCancellation { animator.cancel() }
     }
 }
+
+private const val PLAYBACK_LOG_TAG = "PlaybackViewModel"

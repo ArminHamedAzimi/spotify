@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.input.pointer.pointerInput
@@ -89,7 +90,7 @@ fun MiniPlayer(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(AppDimens.miniPlayerArtworkSize)
-                        .clip(MaterialTheme.shapes.small)
+                        .clip(CircleShape)
                 ) {
                     if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
                         SubcomposeAsyncImageContent()

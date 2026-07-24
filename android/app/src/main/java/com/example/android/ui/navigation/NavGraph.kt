@@ -19,7 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -105,7 +108,15 @@ fun SpotifyNavGraph(
             }
         },
         bottomBar = {
-            if (isMainDestination) {
+            AnimatedVisibility(
+                visible = isMainDestination,
+                enter = fadeIn(
+                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                ),
+                exit = fadeOut(
+                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                )
+            ) {
                 Column {
                     if (playbackState.hasMedia) {
                         MiniPlayer(
@@ -147,7 +158,8 @@ fun SpotifyNavGraph(
                 DownloadsScreen(
                     songs = pagedDownloads,
                     isPremium = profileState.user?.hasActivePremium == true,
-                    onSongClick = playbackViewModel::play
+                    onSongClick = playbackViewModel::play,
+                    onRemoveSong = downloadsViewModel::removeDownload
                 )
             }
             composable(Screen.Playlists.route) { PlaylistsScreen() }

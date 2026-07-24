@@ -1,10 +1,11 @@
 package com.example.android.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import android.content.res.Configuration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 
 private val DarkColors = darkColorScheme(
     primary = BrandGreen,
@@ -55,8 +56,12 @@ fun SpotifyTheme(
     themeMode: ThemeMode = ThemeMode.System,
     content: @Composable () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val systemIsDark = (
+        configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        ) == Configuration.UI_MODE_NIGHT_YES
     val darkTheme = when (themeMode) {
-        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.System -> systemIsDark
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }

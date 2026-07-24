@@ -97,4 +97,6 @@
     <string name="downloads_empty">Your downloaded songs will appear here.</string>
     <string name="downloaded_songs">Downloaded songs</string>
     <string name="download_playback_premium_required">Your downloads are saved, but playback from this tab requires an active Premium subscription.</string>
+    <string name="remove_download">Remove download</string>
+    <string name="download_removed">The offline song and cover were removed from this device.</string>
 </resources>

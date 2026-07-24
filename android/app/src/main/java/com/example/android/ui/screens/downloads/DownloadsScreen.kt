@@ -1,6 +1,7 @@
 package com.example.android.ui.screens.downloads
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +42,12 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DownloadsScreen(
     songs: LazyPagingItems<DownloadedSong>,
     isPremium: Boolean,
-    onSongClick: (Song) -> Unit
+    onSongClick: (Song) -> Unit,
+    onRemoveSong: (String) -> Unit
 ) {
     if (songs.loadState.refresh is LoadState.Loading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -83,43 +91,86 @@ fun DownloadsScreen(
         ) { index ->
             val downloaded = songs[index] ?: return@items
             val song = downloaded.toPlayableSong()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium)
-                    .clickable(enabled = isPremium) { onSongClick(song) }
-                    .padding(AppDimens.spaceSmall),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
-            ) {
-                SubcomposeAsyncImage(
-                    model = song.coverImageUrl,
-                    contentDescription = stringResource(R.string.song_cover, song.title),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(AppDimens.miniPlayerArtworkSize)
-                        .clip(MaterialTheme.shapes.small)
-                ) {
-                    if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
-                        SubcomposeAsyncImageContent()
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    if (value != SwipeToDismissBoxValue.Settled) {
+                        onRemoveSong(song.id)
+                        true
                     } else {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.MusicNote, contentDescription = null)
-                        }
+                        false
                     }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(song.title, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        song.artistName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SwipeToDismissBox(
+                state = dismissState,
+                enableDismissFromStartToEnd = true,
+                enableDismissFromEndToStart = true,
+                backgroundContent = {
+                    val alignment = if (
+                        dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+                    ) {
+                        Alignment.CenterStart
+                    } else {
+                        Alignment.CenterEnd
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = AppDimens.spaceLarge),
+                        contentAlignment = alignment
+                    ) {
+                        Icon(
+                            Icons.Rounded.Delete,
+                            contentDescription = stringResource(R.string.remove_download),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable(enabled = isPremium) { onSongClick(song) }
+                        .padding(AppDimens.spaceSmall),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+                ) {
+                    SubcomposeAsyncImage(
+                        model = song.coverImageUrl,
+                        contentDescription = stringResource(R.string.song_cover, song.title),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(AppDimens.miniPlayerArtworkSize)
+                            .clip(MaterialTheme.shapes.small)
+                    ) {
+                        if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
+                            SubcomposeAsyncImageContent()
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(song.title, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            song.artistName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Rounded.CloudDownload,
+                        contentDescription = stringResource(R.string.downloaded)
                     )
                 }
-                Icon(
-                    Icons.Rounded.CloudDownload,
-                    contentDescription = stringResource(R.string.downloaded)
-                )
             }
         }
         if (songs.loadState.append is LoadState.Loading) {

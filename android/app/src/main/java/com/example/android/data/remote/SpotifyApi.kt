@@ -25,6 +25,14 @@ interface SpotifyApi {
     @GET("users/me/")
     suspend fun currentUser(@Header("Authorization") authorization: String): UserDto
 
+    @GET("users/search/")
+    suspend fun searchUsers(
+        @Header("Authorization") authorization: String,
+        @Query("q") query: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<PublicProfileDto>
+
     @PATCH("users/{id}/")
     suspend fun updateUser(
         @Header("Authorization") authorization: String,
@@ -49,6 +57,14 @@ interface SpotifyApi {
     suspend fun recentSongs(
         @Header("Authorization") authorization: String
     ): List<SongDto>
+
+    @GET("songs/search/")
+    suspend fun searchSongs(
+        @Header("Authorization") authorization: String,
+        @Query("q") query: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<SongDto>
 
     @GET("playlists/me/")
     suspend fun myPlaylists(

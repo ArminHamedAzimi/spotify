@@ -53,6 +53,7 @@ import com.example.android.ui.screens.player.PlayerScreen
 import com.example.android.ui.screens.profile.ProfileScreen
 import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.ui.screens.search.SearchScreen
+import com.example.android.ui.screens.search.SearchViewModel
 import com.example.android.ui.screens.settings.SettingsScreen
 import com.example.android.ui.theme.ThemeMode
 import com.example.android.ui.theme.AppDimens
@@ -77,6 +78,7 @@ fun SpotifyNavGraph(
     val playbackViewModel: PlaybackViewModel = koinViewModel()
     val downloadsViewModel: DownloadsViewModel = koinViewModel()
     val playlistsViewModel: PlaylistsViewModel = koinViewModel()
+    val searchViewModel: SearchViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
@@ -84,6 +86,10 @@ fun SpotifyNavGraph(
     val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
     val pagedPlaylists = playlistsViewModel.playlists.collectAsLazyPagingItems()
     val pagedPlaylistSongs = playlistsViewModel.songs.collectAsLazyPagingItems()
+    val searchState by searchViewModel.state.collectAsStateWithLifecycle()
+    val searchedProfiles = searchViewModel.profiles.collectAsLazyPagingItems()
+    val searchedSongs = searchViewModel.songs.collectAsLazyPagingItems()
+    val searchHistory by searchViewModel.history.collectAsStateWithLifecycle(emptyList())
     LaunchedEffect(profileState.user?.id) {
         val userId = profileState.user?.id
         playbackViewModel.setActiveUser(userId)
@@ -162,7 +168,20 @@ fun SpotifyNavGraph(
                     onSongClick = playbackViewModel::play
                 )
             }
-            composable(Screen.Search.route) { SearchScreen() }
+            composable(Screen.Search.route) {
+                SearchScreen(
+                    state = searchState,
+                    profiles = searchedProfiles,
+                    songs = searchedSongs,
+                    history = searchHistory,
+                    onQueryChange = searchViewModel::setQuery,
+                    onTypeChange = searchViewModel::setType,
+                    onCommitQuery = searchViewModel::saveCurrentQuery,
+                    onHistoryClick = searchViewModel::useHistory,
+                    onRemoveHistory = searchViewModel::removeHistory,
+                    onSongClick = playbackViewModel::play
+                )
+            }
             composable(Screen.Downloads.route) {
                 DownloadsScreen(
                     songs = pagedDownloads,

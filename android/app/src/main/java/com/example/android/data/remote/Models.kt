@@ -11,6 +11,13 @@ data class UserDto(
     @SerializedName("avatar_url") val avatarUrl: String?
 )
 
+data class PublicProfileDto(
+    val id: String,
+    val name: String,
+    @SerializedName("avatar_url") val avatarUrl: String?,
+    @SerializedName("has_active_premium") val hasActivePremium: Boolean
+)
+
 data class LoginRequest(val email: String, val password: String)
 
 data class RegisterRequest(

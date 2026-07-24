@@ -106,4 +106,13 @@
     <string name="new_playlist">نام پلی‌لیست جدید</string>
     <string name="create">ساخت</string>
     <string name="remove_from_playlist">حذف از پلی‌لیست</string>
+    <string name="search_hint">جستجوی پروفایل، آهنگ یا هنرمند</string>
+    <string name="search_profiles">پروفایل‌ها</string>
+    <string name="search_songs">آهنگ‌ها</string>
+    <string name="search_start_typing">برای جستجو شروع به نوشتن کنید</string>
+    <string name="search_no_profiles">پروفایلی پیدا نشد</string>
+    <string name="search_no_songs">آهنگی پیدا نشد</string>
+    <string name="search_failed">بارگذاری جستجو انجام نشد</string>
+    <string name="search_history">جستجوهای اخیر</string>
+    <string name="remove_search_history">حذف از تاریخچه جستجو</string>
 </resources>

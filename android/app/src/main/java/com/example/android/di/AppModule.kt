@@ -15,6 +15,10 @@ import com.example.android.data.downloads.DownloadRepository
 import com.example.android.ui.screens.downloads.DownloadsViewModel
 import com.example.android.data.playlists.PlaylistRepository
 import com.example.android.ui.screens.playlists.PlaylistsViewModel
+import com.example.android.data.search.SearchRepository
+import com.example.android.ui.screens.search.SearchViewModel
+import com.example.android.data.search.SearchHistoryDatabase
+import androidx.room.Room
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -24,6 +28,14 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 val appModule = module {
     single { TokenStore(androidContext()) }
+    single {
+        Room.databaseBuilder(
+            androidContext(),
+            SearchHistoryDatabase::class.java,
+            "search-history.db"
+        ).build()
+    }
+    single { get<SearchHistoryDatabase>().historyDao() }
     single {
         OkHttpClient.Builder()
             .addInterceptor(
@@ -44,6 +56,7 @@ val appModule = module {
     single { ProfileRepository(androidContext(), get(), get()) }
     single { DownloadRepository(androidContext()) }
     single { PlaylistRepository(get(), get()) }
+    single { SearchRepository(get(), get(), get()) }
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
@@ -51,4 +64,5 @@ val appModule = module {
     viewModel { PlaybackViewModel(androidContext() as android.app.Application, get(), get()) }
     viewModel { DownloadsViewModel(get()) }
     viewModel { PlaylistsViewModel(get()) }
+    viewModel { SearchViewModel(get()) }
 }

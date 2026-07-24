@@ -44,3 +44,26 @@ data class SongDto(
     val duration: String?,
     @SerializedName("is_published") val isPublished: Boolean
 )
+
+data class PlaylistDto(
+    val id: String,
+    val owner: UserDto,
+    val title: String,
+    val description: String,
+    @SerializedName("is_public") val isPublic: Boolean,
+    @SerializedName("is_liked") val isLiked: Boolean,
+    val songs: List<String>,
+    @SerializedName("follower_count") val followerCount: Int
+)
+
+data class CreatePlaylistRequest(
+    val title: String,
+    val description: String = "",
+    @SerializedName("is_public") val isPublic: Boolean = false
+)
+data class PlaylistSongRequest(@SerializedName("song_id") val songId: String)
+data class NextSongRequest(
+    @SerializedName("song_id") val songId: String?,
+    val shuffle: Boolean
+)
+data class RandomNextRequest(@SerializedName("song_id") val songId: String?)

@@ -99,4 +99,11 @@
     <string name="download_playback_premium_required">دانلودهای شما ذخیره هستند، اما پخش از این بخش به اشتراک فعال پریمیوم نیاز دارد.</string>
     <string name="remove_download">حذف دانلود</string>
     <string name="download_removed">آهنگ و کاور آفلاین از این دستگاه حذف شدند.</string>
+    <string name="my_playlists">پلی‌لیست‌های من</string>
+    <string name="playlist_song_count">%1$d آهنگ</string>
+    <string name="shuffle">پخش تصادفی</string>
+    <string name="add_to_playlist">افزودن به پلی‌لیست</string>
+    <string name="new_playlist">نام پلی‌لیست جدید</string>
+    <string name="create">ساخت</string>
+    <string name="remove_from_playlist">حذف از پلی‌لیست</string>
 </resources>

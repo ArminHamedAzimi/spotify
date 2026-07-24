@@ -12,6 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,10 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -44,8 +48,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -82,6 +88,7 @@ import coil.request.SuccessResult
 import com.example.android.R
 import com.example.android.playback.PlaybackConfig
 import com.example.android.playback.PlaybackUiState
+import com.example.android.data.remote.PlaylistDto
 import com.example.android.ui.theme.AppDimens
 import com.example.android.ui.theme.PlayerVisuals
 import kotlinx.coroutines.Dispatchers
@@ -89,12 +96,19 @@ import kotlinx.coroutines.withContext
 import kotlin.math.sin
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun PlayerScreen(
     state: PlaybackUiState,
     onTogglePlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSleepTimerChange: (Int?) -> Unit,
+    playlists: List<PlaylistDto>,
+    onAddToPlaylist: (String, String) -> Unit,
+    onCreatePlaylist: (String, () -> Unit) -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onShuffleChange: (Boolean) -> Unit,
     isDownloaded: Boolean,
     isDownloading: Boolean,
     @StringRes downloadMessageRes: Int?,
@@ -147,6 +161,36 @@ fun PlayerScreen(
         }
     }
     var showSleepTimer by remember { mutableStateOf(false) }
+    var showPlaylists by remember { mutableStateOf(false) }
+    var shuffle by remember { mutableStateOf(false) }
+    var newPlaylistTitle by remember { mutableStateOf("") }
+    if (showPlaylists) {
+        ModalBottomSheet(onDismissRequest = { showPlaylists = false }) {
+            Column(Modifier.padding(AppDimens.spaceLarge)) {
+                Text(stringResource(R.string.add_to_playlist), style = MaterialTheme.typography.headlineSmall)
+                OutlinedTextField(
+                    value = newPlaylistTitle,
+                    onValueChange = { newPlaylistTitle = it },
+                    label = { Text(stringResource(R.string.new_playlist)) }
+                )
+                Button(
+                    onClick = {
+                        onCreatePlaylist(newPlaylistTitle) { newPlaylistTitle = "" }
+                    },
+                    enabled = newPlaylistTitle.isNotBlank()
+                ) { Text(stringResource(R.string.create)) }
+                playlists.forEach { playlist ->
+                    ListItem(
+                        headlineContent = { Text(playlist.title) },
+                        modifier = Modifier.clickable {
+                            state.mediaId?.let { onAddToPlaylist(playlist.id, it) }
+                            showPlaylists = false
+                        }
+                    )
+                }
+            }
+        }
+    }
     LaunchedEffect(state.artworkUrl) {
         val artworkUrl = state.artworkUrl ?: return@LaunchedEffect
         val request = ImageRequest.Builder(context)
@@ -236,7 +280,18 @@ fun PlayerScreen(
         }
         AudioVisualizer(isPlaying = state.isPlaying)
         PlaybackProgress(state = state, onSeek = onSeek)
-        PlaybackControls(state = state, onTogglePlayPause = onTogglePlayPause)
+        PlaybackControls(
+            state = state,
+            onTogglePlayPause = onTogglePlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            shuffle = shuffle,
+            onShuffle = {
+                shuffle = !shuffle
+                onShuffleChange(shuffle)
+            },
+            onAdd = { showPlaylists = true }
+        )
         PlayerOptions(
             playbackSpeed = state.playbackSpeed,
             sleepTimerMinutes = state.sleepTimerMinutes,
@@ -382,14 +437,30 @@ private fun PlaybackProgress(state: PlaybackUiState, onSeek: (Long) -> Unit) {
 }
 
 @Composable
-private fun PlaybackControls(state: PlaybackUiState, onTogglePlayPause: () -> Unit) {
+private fun PlaybackControls(
+    state: PlaybackUiState,
+    onTogglePlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    shuffle: Boolean,
+    onShuffle: () -> Unit,
+    onAdd: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)) {
+        IconButton(onClick = onShuffle) {
+            Icon(Icons.Rounded.Shuffle, stringResource(R.string.shuffle),
+                tint = if (shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = onAdd) {
+            Icon(Icons.Rounded.Add, stringResource(R.string.add_to_playlist))
+        }
+    }
     Row(
         horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceLarge),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = {},
-            enabled = false,
+            onClick = onPrevious,
             modifier = Modifier.size(AppDimens.playerSecondaryControlSize)
         ) {
             Icon(Icons.Rounded.SkipPrevious, stringResource(R.string.previous_song))
@@ -411,8 +482,7 @@ private fun PlaybackControls(state: PlaybackUiState, onTogglePlayPause: () -> Un
             }
         }
         IconButton(
-            onClick = {},
-            enabled = false,
+            onClick = onNext,
             modifier = Modifier.size(AppDimens.playerSecondaryControlSize)
         ) {
             Icon(Icons.Rounded.SkipNext, stringResource(R.string.next_song))

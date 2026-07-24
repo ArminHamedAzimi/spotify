@@ -319,7 +319,7 @@ class PlaylistViewSet(viewsets.ModelViewSet):
         current_song_id = input_serializer.validated_data["song_id"]
         shuffle = input_serializer.validated_data["shuffle"]
         if current_song_id is None:
-            next_entry = entries[0]
+            next_entry = random.choice(entries) if shuffle else entries[0]
         else:
             current_index = next(
                 (

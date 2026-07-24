@@ -211,6 +211,14 @@ class ApiAuthorizationTests(TestCase):
         )
         self.assertEqual(start_response.data["id"], str(first.pk))
 
+        with patch("spotify.views.random.choice", return_value=entries[1]):
+            shuffled_start_response = self.api_client.post(
+                f"/api/playlists/{self.playlist.pk}/next-song/",
+                {"shuffle": True},
+                format="json",
+            )
+        self.assertEqual(shuffled_start_response.data["id"], str(second.pk))
+
         next_response = self.api_client.post(
             f"/api/playlists/{self.playlist.pk}/next-song/",
             {"song_id": str(first.pk), "shuffle": False},

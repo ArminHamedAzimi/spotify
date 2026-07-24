@@ -947,8 +947,11 @@ Start a playlist from its first ordered song:
 
 Behavior:
 
-- When `song_id` is `null`, the first song is returned. This starts the
-  playlist consistently even when shuffle is enabled.
+- When `song_id` is `null` or omitted and `shuffle` is `false`, the first
+  ordered song is returned.
+- When `song_id` is `null` or omitted and `shuffle` is `true`, a random song
+  from the playlist is returned. This supports starting playback in shuffle
+  mode with only `{"shuffle": true}`.
 - With `shuffle: false`, the next ordered song is returned.
 - At the end of the playlist, non-shuffle playback wraps to the first song.
 - With `shuffle: true`, a random playlist song other than the current one is

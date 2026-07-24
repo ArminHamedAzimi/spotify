@@ -7,28 +7,59 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 private val DarkColors = darkColorScheme(
-    primary = GreenPrimary,
+    primary = BrandGreen,
+    onPrimary = DarkBackground,
+    primaryContainer = DarkGreenContainer,
+    onPrimaryContainer = DarkOnGreenContainer,
+    secondary = DarkOnGreenContainer,
+    onSecondary = DarkBackground,
+    tertiary = PremiumGold,
+    onTertiary = DarkBackground,
+    tertiaryContainer = DarkPremiumContainer,
+    onTertiaryContainer = DarkOnPremiumContainer,
     background = DarkBackground,
+    onBackground = DarkOnSurface,
     surface = DarkSurface,
     onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline,
     error = ErrorColor
 )
 
 private val LightColors = lightColorScheme(
-    primary = GreenPrimaryDark,
+    primary = BrandGreenPressed,
+    onPrimary = White,
+    primaryContainer = LightGreenContainer,
+    onPrimaryContainer = LightOnGreenContainer,
+    secondary = BrandGreenPressed,
+    onSecondary = White,
+    tertiary = PremiumGold,
+    onTertiary = LightOnSurface,
+    tertiaryContainer = LightPremiumContainer,
+    onTertiaryContainer = LightOnPremiumContainer,
     background = LightBackground,
+    onBackground = LightOnSurface,
     surface = LightSurface,
     onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
     error = ErrorColor
 )
 
+enum class ThemeMode { System, Light, Dark }
+
 @Composable
 fun SpotifyTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.System,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
     val colors = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
         colorScheme = colors,

@@ -7,6 +7,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.android.R
 
@@ -20,6 +22,8 @@ sealed class Screen(
     data object Downloads : Screen("downloads", R.string.tab_downloads, Icons.Filled.CloudDownload)
     data object Playlists : Screen("playlists", R.string.tab_playlists, Icons.Filled.LibraryMusic)
     data object Profile : Screen("profile", R.string.tab_profile, Icons.Filled.Person)
+    data object Notifications : Screen("notifications", R.string.notifications, Icons.Filled.Notifications)
+    data object Settings : Screen("settings", R.string.settings, Icons.Filled.Settings)
 }
 
 val bottomNavItems = listOf(

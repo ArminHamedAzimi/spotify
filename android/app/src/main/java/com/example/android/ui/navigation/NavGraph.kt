@@ -1,66 +1,241 @@
 package com.example.android.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.android.ui.components.AppTopBar
 import com.example.android.ui.screens.downloads.DownloadsScreen
 import com.example.android.ui.screens.home.HomeScreen
+import com.example.android.ui.screens.notifications.NotificationsScreen
 import com.example.android.ui.screens.playlists.PlaylistsScreen
 import com.example.android.ui.screens.profile.ProfileScreen
+import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.ui.screens.search.SearchScreen
+import com.example.android.ui.screens.settings.SettingsScreen
+import com.example.android.ui.theme.ThemeMode
+import com.example.android.ui.theme.AppDimens
+import com.example.android.ui.localization.AppLanguage
+import com.example.android.data.remote.UserDto
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 
 @Composable
-fun SpotifyNavGraph() {
+fun SpotifyNavGraph(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    appLanguage: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit
+) {
     val navController = rememberNavController()
+    val profileViewModel: ProfileViewModel = viewModel()
+    val profileState by profileViewModel.uiState
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
+    val isMainDestination = bottomNavItems.any { it.route == currentRoute }
 
     Scaffold(
-        bottomBar = { MelodifyBottomBar(navController) }
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            AppTopBar(
+                isMainDestination = isMainDestination,
+                titleRes = when (currentRoute) {
+                    Screen.Notifications.route -> Screen.Notifications.titleRes
+                    Screen.Settings.route -> Screen.Settings.titleRes
+                    else -> null
+                },
+                onBackClick = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                onSettingsClick = { navController.navigate(Screen.Settings.route) }
+            )
+        },
+        bottomBar = {
+            if (isMainDestination) {
+                MelodifyBottomBar(
+                    currentRoute = currentRoute,
+                    user = profileState.user,
+                    onNavigate = { screen ->
+                        navController.navigate(screen.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
+        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = androidx.compose.ui.Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) { HomeScreen() }
             composable(Screen.Search.route) { SearchScreen() }
             composable(Screen.Downloads.route) { DownloadsScreen() }
             composable(Screen.Playlists.route) { PlaylistsScreen() }
-            composable(Screen.Profile.route) { ProfileScreen() }
+            composable(Screen.Profile.route) {
+                ProfileScreen(profileViewModel = profileViewModel)
+            }
+            composable(Screen.Notifications.route) { NotificationsScreen() }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange,
+                    appLanguage = appLanguage,
+                    onLanguageChange = onLanguageChange
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun MelodifyBottomBar(navController: androidx.navigation.NavHostController) {
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-
-    NavigationBar {
+private fun MelodifyBottomBar(
+    currentRoute: String,
+    user: UserDto?,
+    onNavigate: (Screen) -> Unit
+) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = com.example.android.ui.theme.AppDimens.bottomBarElevation
+    ) {
         bottomNavItems.forEach { screen ->
-            NavigationBarItem(
-                selected = currentRoute == screen.route,
-                onClick = {
-                    navController.navigate(screen.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(screen.icon, contentDescription = null) },
-                label = { Text(stringResource(screen.titleRes)) }
+            val selected = currentRoute == screen.route
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .selectable(
+                        selected = selected,
+                        onClick = { onNavigate(screen) },
+                        role = Role.Tab
+                    )
+                    .padding(vertical = AppDimens.bottomBarItemVerticalPadding),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(AppDimens.bottomBarIndicatorWidth)
+                        .height(AppDimens.bottomBarIndicatorHeight)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                Color.Transparent
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BottomBarIcon(screen = screen, user = user, selected = selected)
+                }
+                Text(
+                    text = if (screen == Screen.Profile && user != null) {
+                        user.name
+                    } else {
+                        stringResource(screen.titleRes)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomBarIcon(screen: Screen, user: UserDto?, selected: Boolean) {
+    Box(
+        modifier = Modifier.size(AppDimens.bottomBarIconContainerSize),
+        contentAlignment = Alignment.Center
+    ) {
+        if (screen == Screen.Profile && user?.avatarUrl != null) {
+            BottomBarAvatar(user)
+        } else {
+            Icon(
+                imageVector = screen.icon,
+                contentDescription = null,
+                modifier = Modifier.size(AppDimens.bottomBarIconSize),
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomBarAvatar(user: UserDto) {
+    Box(
+        modifier = Modifier.size(AppDimens.bottomBarAvatarSize),
+        contentAlignment = Alignment.Center
+    ) {
+        SubcomposeAsyncImage(
+            model = user.avatarUrl,
+            contentDescription = stringResource(com.example.android.R.string.profile_avatar),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(AppDimens.bottomBarAvatarSize)
+                .clip(CircleShape)
+        ) {
+            if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
+                SubcomposeAsyncImageContent()
+            } else {
+                Icon(
+                    imageVector = Screen.Profile.icon,
+                    contentDescription = null
+                )
+            }
+        }
+        if (user.hasActivePremium) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(AppDimens.premiumBadgeSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(
+                        width = AppDimens.borderWidth,
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = CircleShape
+                    )
             )
         }
     }

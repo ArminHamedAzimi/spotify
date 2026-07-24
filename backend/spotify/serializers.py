@@ -47,6 +47,22 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 
+class PublicUserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "name", "avatar_url", "has_active_premium")
+        read_only_fields = fields
+
+
+class UserSearchQuerySerializer(serializers.Serializer):
+    q = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=150,
+        trim_whitespace=True,
+    )
+
+
 class AvatarUploadSerializer(serializers.Serializer):
     avatar = serializers.ImageField(write_only=True)
 
@@ -140,6 +156,15 @@ class PlaylistNextSongSerializer(serializers.Serializer):
 
 class RandomNextSongSerializer(serializers.Serializer):
     song_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+
+class SongSearchQuerySerializer(serializers.Serializer):
+    q = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=200,
+        trim_whitespace=True,
+    )
 
 
 class PlaylistFollowSerializer(serializers.ModelSerializer):

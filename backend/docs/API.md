@@ -215,21 +215,26 @@ This endpoint is restricted to Django staff/admin accounts. Regular
 authenticated users receive `403 Forbidden`; they should use
 `GET /api/users/me/` to load their own profile.
 
-Response — `200 OK`:
+Accepts `page` and `page_size`. Response — `200 OK`:
 
 ```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Ada Lovelace",
-    "email": "ada@example.com",
-    "premium_expires_at": null,
-    "has_active_premium": false,
-    "avatar_url": "https://media.example.com/avatars/ada.jpg",
-    "created_at": "2026-07-23T17:30:00Z",
-    "updated_at": "2026-07-23T17:30:00Z"
-  }
-]
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Ada Lovelace",
+      "email": "ada@example.com",
+      "premium_expires_at": null,
+      "has_active_premium": false,
+      "avatar_url": "https://media.example.com/avatars/ada.jpg",
+      "created_at": "2026-07-23T17:30:00Z",
+      "updated_at": "2026-07-23T17:30:00Z"
+    }
+  ]
+}
 ```
 
 ### 4.2 Get the authenticated user's profile
@@ -258,7 +263,49 @@ Response — `200 OK`:
 
 Missing or invalid JWT authentication returns `401 Unauthorized`.
 
-### 4.3 Get one user by UUID
+### 4.3 Search public user profiles
+
+```http
+GET /api/users/search/?q=aurora&page=1&page_size=10
+```
+
+Searches active users by display name using case-insensitive matching.
+
+Query parameters:
+
+- `q` — required, non-empty name text with a maximum length of 150 characters.
+- `page` — optional page number starting at 1.
+- `page_size` — optional result count; defaults to 10 and is capped at 100.
+
+The endpoint requires JWT authentication. Search results intentionally expose
+only public-safe profile fields; email addresses, password data, premium
+expiration timestamps, permissions, and account flags are not returned.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 2,
+  "next": "http://10.0.2.2:8000/api/users/search/?page=2&page_size=1&q=aurora",
+  "previous": null,
+  "results": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Aurora One",
+      "avatar_url": "https://example.com/avatars/aurora.jpg",
+      "has_active_premium": true
+    }
+  ]
+}
+```
+
+Results use stable alphabetical name then UUID ordering. Inactive accounts are
+excluded. No matches returns `count: 0` and `results: []`.
+
+An empty or missing `q` returns `400 Bad Request`. Missing or invalid JWT
+authentication returns `401 Unauthorized`.
+
+### 4.4 Get one user by UUID
 
 ```http
 GET /api/users/{id}/
@@ -269,7 +316,7 @@ staff/admin users can retrieve any user.
 
 Response — `200 OK`: one user object in the same format shown above.
 
-### 4.4 Replace a user
+### 4.5 Replace a user
 
 ```http
 PUT /api/users/{id}/
@@ -289,7 +336,7 @@ Request:
 The password may be omitted to keep the existing password. It is write-only.
 Response — `200 OK`: the updated user without the password.
 
-### 4.5 Partially update a user
+### 4.6 Partially update a user
 
 ```http
 PATCH /api/users/{id}/
@@ -313,7 +360,7 @@ To change the password:
 
 Response — `200 OK`: the updated user object.
 
-### 4.6 Delete a user
+### 4.7 Delete a user
 
 ```http
 DELETE /api/users/{id}/
@@ -322,7 +369,7 @@ DELETE /api/users/{id}/
 There is no request or response JSON body. Success returns `204 No Content`.
 Deleting a user also deletes playlists and follow records owned by that user.
 
-### 4.7 Upload or replace the current user's avatar
+### 4.8 Upload or replace the current user's avatar
 
 ```http
 POST /api/users/avatar/
@@ -421,7 +468,7 @@ Example validation error — `400 Bad Request`:
 An unsupported or invalid image also returns `400`. Missing or invalid JWT
 authentication returns `401 Unauthorized`.
 
-### 4.8 Add or extend a subscription
+### 4.9 Add or extend a subscription
 
 ```http
 POST /api/users/subscription/
@@ -531,7 +578,75 @@ Response — `200 OK`: a pagination envelope whose `results` contains complete
 accessible song objects. Songs use stable `created_at` descending then UUID
 ordering.
 
-### 5.2 Get the 10 most recently added songs
+### 5.2 Search songs by title or singer name
+
+```http
+GET /api/songs/search/?q=aurora&page=1&page_size=10
+```
+
+Query parameters:
+
+- `q` — required, non-empty search text with a maximum length of 200
+  characters.
+- `page` — optional page number starting at 1.
+- `page_size` — optional result count; defaults to 10 and is capped at 100.
+
+Search is case-insensitive and matches either:
+
+- The song `title`
+- The singer/artist `name`
+
+It uses the normal visibility rules, so regular users receive published songs
+and their own unpublished songs, while staff can search all songs. Results use
+stable newest-first ordering.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 24,
+  "next": "http://10.0.2.2:8000/api/songs/search/?page=2&page_size=10&q=aurora",
+  "previous": null,
+  "results": [
+    {
+      "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+      "title": "Aurora Lights",
+      "artist": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Aurora Singer",
+        "email": "artist@example.com",
+        "premium_expires_at": null,
+        "has_active_premium": false,
+        "avatar_url": "https://example.com/avatar.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "cover_image_url": "https://example.com/cover.jpg",
+      "audio_url": "https://example.com/song.mp3",
+      "duration": "00:03:42",
+      "is_published": true,
+      "created_at": "2026-07-24T09:00:00Z",
+      "updated_at": "2026-07-24T09:00:00Z"
+    }
+  ]
+}
+```
+
+No matches returns the same envelope with `count: 0` and `results: []`.
+
+A missing or empty `q` returns `400 Bad Request`:
+
+```json
+{
+  "q": [
+    "This field may not be blank."
+  ]
+}
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
+
+### 5.3 Get the 10 most recently added songs
 
 ```http
 GET /api/songs/recent/
@@ -581,7 +696,7 @@ If no accessible songs exist, the response is an empty array:
 
 Missing or invalid JWT authentication returns `401 Unauthorized`.
 
-### 5.3 Create a song
+### 5.4 Create a song
 
 ```http
 POST /api/songs/
@@ -601,7 +716,7 @@ Request:
 
 Response — `201 Created`: the complete song object.
 
-### 5.4 Get one song
+### 5.5 Get one song
 
 ```http
 GET /api/songs/{id}/
@@ -609,7 +724,7 @@ GET /api/songs/{id}/
 
 `{id}` is the song UUID. Response — `200 OK`: one complete song object.
 
-### 5.5 Replace a song
+### 5.6 Replace a song
 
 ```http
 PUT /api/songs/{id}/
@@ -629,7 +744,7 @@ Request uses the same writable fields as song creation:
 
 Response — `200 OK`: the updated song.
 
-### 5.6 Partially update a song
+### 5.7 Partially update a song
 
 ```http
 PATCH /api/songs/{id}/
@@ -645,7 +760,7 @@ Example:
 
 Response — `200 OK`: the updated song.
 
-### 5.7 Delete a song
+### 5.8 Delete a song
 
 ```http
 DELETE /api/songs/{id}/
@@ -653,7 +768,7 @@ DELETE /api/songs/{id}/
 
 No JSON body. Success returns `204 No Content`.
 
-### 5.8 Get a random next song outside a playlist
+### 5.9 Get a random next song outside a playlist
 
 ```http
 POST /api/songs/random-next/

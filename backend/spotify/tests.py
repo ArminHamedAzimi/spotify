@@ -74,7 +74,8 @@ class ApiAuthorizationTests(TestCase):
         self.api_client.force_authenticate(user=self.owner)
         response = self.api_client.get("/api/users/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_authenticated_user_can_get_own_profile(self):
         self.api_client.force_authenticate(user=self.owner)
@@ -130,6 +131,94 @@ class ApiAuthorizationTests(TestCase):
         self.assertEqual(len(response.data), 10)
         self.assertEqual(response.data[0]["title"], "Song 11")
         self.assertEqual(response.data[-1]["title"], "Song 2")
+
+    def test_song_search_matches_title_and_singer_with_pagination(self):
+        singer = User.objects.create_user(
+            email="singer@example.com",
+            password="password123!",
+            name="Aurora Singer",
+        )
+        title_match = Song.objects.create(
+            title="Aurora Lights",
+            artist=self.owner,
+            cover_image_url="https://media.example.com/title-match.jpg",
+            audio_url="https://media.example.com/title-match.mp3",
+            is_published=True,
+        )
+        singer_match = Song.objects.create(
+            title="Running",
+            artist=singer,
+            cover_image_url="https://media.example.com/singer-match.jpg",
+            audio_url="https://media.example.com/singer-match.mp3",
+            is_published=True,
+        )
+        Song.objects.create(
+            title="Aurora Private",
+            artist=self.other,
+            cover_image_url="https://media.example.com/private.jpg",
+            audio_url="https://media.example.com/private.mp3",
+            is_published=False,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get(
+            "/api/songs/search/?q=aurora&page=1&page_size=1"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["next"])
+        result_ids = {
+            response.data["results"][0]["id"],
+            self.api_client.get(response.data["next"]).data["results"][0]["id"],
+        }
+        self.assertEqual(result_ids, {str(title_match.pk), str(singer_match.pk)})
+
+    def test_song_search_requires_non_empty_query(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.get("/api/songs/search/?q=")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_user_search_returns_paginated_public_profiles(self):
+        User.objects.create_user(
+            email="aurora.one@example.com",
+            password="password123!",
+            name="Aurora One",
+        )
+        User.objects.create_user(
+            email="aurora.two@example.com",
+            password="password123!",
+            name="Aurora Two",
+        )
+        inactive = User.objects.create_user(
+            email="aurora.inactive@example.com",
+            password="password123!",
+            name="Aurora Inactive",
+        )
+        inactive.is_active = False
+        inactive.save(update_fields=["is_active"])
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get(
+            "/api/users/search/?q=aurora&page=1&page_size=1"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["next"])
+        profile = response.data["results"][0]
+        self.assertEqual(
+            set(profile),
+            {"id", "name", "avatar_url", "has_active_premium"},
+        )
+        self.assertNotIn("email", profile)
+
+    def test_user_search_requires_non_empty_query(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.get("/api/users/search/?q=")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_new_user_has_protected_liked_playlist(self):
         liked = Playlist.objects.get(owner=self.owner, is_liked=True)

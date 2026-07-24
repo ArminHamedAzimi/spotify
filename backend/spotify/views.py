@@ -36,11 +36,14 @@ from .serializers import (
     PlaylistFollowSerializer,
     PlaylistSerializer,
     PlaylistNextSongSerializer,
+    PublicUserProfileSerializer,
     RandomNextSongSerializer,
     SongSerializer,
+    SongSearchQuerySerializer,
     SubscriptionResponseSerializer,
     SubscriptionSerializer,
     UserSerializer,
+    UserSearchQuerySerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,19 +61,20 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = (IsAuthenticated, IsSelfOrStaff)
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = cast(User, self.request.user)
         if user.is_staff:
-            return User.objects.all()
-        return User.objects.filter(pk=user.pk)
+            return User.objects.order_by("-created_at", "pk")
+        return User.objects.filter(pk=user.pk).order_by("-created_at", "pk")
 
     def get_permissions(self):
         if self.action == "create":
             return [AllowAny()]
         if self.action == "list":
             return [IsAdminUser()]
-        if self.action == "me":
+        if self.action in {"me", "search"}:
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -78,6 +82,26 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         user = cast(User, request.user)
         return Response(self.get_serializer(user).data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        parameters=[UserSearchQuerySerializer],
+        responses={200: PublicUserProfileSerializer(many=True)},
+    )
+    @action(detail=False, methods=("get",), url_path="search")
+    def search(self, request):
+        query_serializer = UserSearchQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        query = query_serializer.validated_data["q"]
+        users = User.objects.filter(
+            is_active=True,
+            name__icontains=query,
+        ).order_by("name", "pk")
+        page = self.paginate_queryset(users)
+        if page is not None:
+            return self.get_paginated_response(
+                PublicUserProfileSerializer(page, many=True).data
+            )
+        return Response(PublicUserProfileSerializer(users, many=True).data)
 
     @extend_schema(
         request=AvatarUploadSerializer,
@@ -183,6 +207,25 @@ class SongViewSet(viewsets.ModelViewSet):
             self.get_serializer(songs, many=True).data,
             status=status.HTTP_200_OK,
         )
+
+    @extend_schema(
+        parameters=[SongSearchQuerySerializer],
+        responses={200: SongSerializer(many=True)},
+    )
+    @action(detail=False, methods=("get",), url_path="search")
+    def search(self, request):
+        query_serializer = SongSearchQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        query = query_serializer.validated_data["q"]
+        songs = self.get_queryset().filter(
+            Q(title__icontains=query) | Q(artist__name__icontains=query)
+        )
+        page = self.paginate_queryset(songs)
+        if page is not None:
+            return self.get_paginated_response(
+                self.get_serializer(page, many=True).data
+            )
+        return Response(self.get_serializer(songs, many=True).data)
 
     @extend_schema(
         request=RandomNextSongSerializer,

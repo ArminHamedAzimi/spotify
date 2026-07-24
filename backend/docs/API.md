@@ -209,8 +209,9 @@ unauthorized objects are excluded from the queryset.
 GET /api/users/
 ```
 
-Regular users receive an array containing only themselves. Staff receive all
-users.
+This endpoint is restricted to Django staff/admin accounts. Regular
+authenticated users receive `403 Forbidden`; they should use
+`GET /api/users/me/` to load their own profile.
 
 Response — `200 OK`:
 
@@ -229,17 +230,44 @@ Response — `200 OK`:
 ]
 ```
 
-### 4.2 Get one user
+### 4.2 Get the authenticated user's profile
+
+```http
+GET /api/users/me/
+```
+
+This is the recommended profile-page endpoint. It identifies the user from the
+JWT, so the Android client does not need to know the user's UUID.
+
+Response — `200 OK`:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Ada Lovelace",
+  "email": "ada@example.com",
+  "premium_expires_at": null,
+  "has_active_premium": false,
+  "avatar_url": "https://media.example.com/avatars/ada.jpg",
+  "created_at": "2026-07-23T17:30:00Z",
+  "updated_at": "2026-07-23T17:30:00Z"
+}
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
+
+### 4.3 Get one user by UUID
 
 ```http
 GET /api/users/{id}/
 ```
 
-`{id}` is the user's UUID.
+`{id}` is the user's UUID. Regular users can retrieve only their own account;
+staff/admin users can retrieve any user.
 
 Response — `200 OK`: one user object in the same format shown above.
 
-### 4.3 Replace a user
+### 4.4 Replace a user
 
 ```http
 PUT /api/users/{id}/
@@ -259,7 +287,7 @@ Request:
 The password may be omitted to keep the existing password. It is write-only.
 Response — `200 OK`: the updated user without the password.
 
-### 4.4 Partially update a user
+### 4.5 Partially update a user
 
 ```http
 PATCH /api/users/{id}/
@@ -283,7 +311,7 @@ To change the password:
 
 Response — `200 OK`: the updated user object.
 
-### 4.5 Delete a user
+### 4.6 Delete a user
 
 ```http
 DELETE /api/users/{id}/
@@ -291,6 +319,105 @@ DELETE /api/users/{id}/
 
 There is no request or response JSON body. Success returns `204 No Content`.
 Deleting a user also deletes playlists and follow records owned by that user.
+
+### 4.7 Upload or replace the current user's avatar
+
+```http
+POST /api/users/avatar/
+```
+
+Uploads an avatar for the user identified by the JWT access token. There is no
+user UUID in this URL: `/users/avatar/` always updates the currently
+authenticated account. A client cannot upload an avatar for another user.
+
+This endpoint uses `multipart/form-data`, not JSON. The form must contain one
+file field named `avatar`.
+
+Android/Retrofit example:
+
+```kotlin
+@Multipart
+@POST("users/avatar/")
+suspend fun uploadAvatar(
+    @Header("Authorization") authorization: String,
+    @Part avatar: MultipartBody.Part
+): AvatarUploadResponse
+```
+
+Create the multipart field using the exact name `avatar`:
+
+```kotlin
+val body = imageFile.asRequestBody("image/jpeg".toMediaType())
+val part = MultipartBody.Part.createFormData("avatar", imageFile.name, body)
+val response = api.uploadAvatar("Bearer $accessToken", part)
+```
+
+Accepted formats are JPEG (`image/jpeg`), PNG (`image/png`), and WebP
+(`image/webp`). Maximum file size is 5 MB.
+
+For upload debugging, the backend emits a `WARNING` log before validation
+containing the original extension, declared multipart MIME type, and filename.
+This log is produced even if image validation later rejects the request. A
+second `INFO` log records the normalized stored extension after successful
+validation. In Docker, inspect these logs with:
+
+```bash
+docker compose logs -f web
+```
+
+Example backend output:
+
+```text
+Avatar upload received: extension=.jpeg, content_type=image/jpeg, filename=profile.jpeg
+Avatar upload normalized extension: .jpg
+```
+
+The stored filename uses the normalized extension: JPEG becomes `.jpg`, PNG
+becomes `.png`, and WebP becomes `.webp`. Therefore, a received `.jpeg`
+filename producing a returned `.jpg` URL is expected and does not change the
+image encoding.
+
+Response — `200 OK`:
+
+```json
+{
+  "avatar_url": "http://localhost:9000/spotify-media/avatars/550e8400-e29b-41d4-a716-446655440000/5f6c9ed714c44a1e93de66dc1f18c77c.jpg"
+}
+```
+
+The upload is complete when this response is returned. The backend saves the
+same URL in the current user's `avatar_url`, so later user, artist, and
+playlist-owner responses contain the new avatar.
+
+The returned URL is composed from:
+
+- `MINIO_PUBLIC_ENDPOINT`, such as `http://localhost:9000`
+- The configured bucket, normally `spotify-media`
+- `avatars/{user-id}/`
+- A server-generated random filename and validated extension
+
+`MINIO_PUBLIC_ENDPOINT` may be configured as either `localhost:9000` or
+`http://localhost:9000`. If its scheme is omitted, Django automatically
+prepends `http://`; consequently, every returned `avatar_url` starts with
+`http://` or `https://`.
+
+For the Android Emulator, configure
+`MINIO_PUBLIC_ENDPOINT=http://10.0.2.2:9000` so the returned URL is reachable.
+A physical device needs the development computer's LAN address or a deployed
+HTTPS media hostname.
+
+Example validation error — `400 Bad Request`:
+
+```json
+{
+  "avatar": [
+    "Avatar size cannot exceed 5 MB."
+  ]
+}
+```
+
+An unsupported or invalid image also returns `400`. Missing or invalid JWT
+authentication returns `401 Unauthorized`.
 
 ## 5. Song APIs
 
@@ -721,3 +848,9 @@ MinIO provides S3-compatible object storage:
 The Android Emulator cannot use `localhost` to reach host MinIO; replace it
 with `10.0.2.2` for development URLs. Production media URLs should normally use
 HTTPS and a public hostname or short-lived presigned URLs.
+
+Avatar objects are uploaded through `POST /api/users/avatar/`. The Compose
+bucket initializer grants public download access, allowing Android image
+libraries to load returned avatar URLs without MinIO credentials. Song cover
+and audio upload endpoints are not implemented yet; `cover_image_url` and
+`audio_url` must currently reference existing objects.

@@ -1,5 +1,10 @@
+from io import BytesIO
+
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test.utils import override_settings
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -55,6 +60,26 @@ class ApiAuthorizationTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_regular_user_cannot_list_users(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.get("/api/users/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_staff_user_can_list_users(self):
+        self.owner.is_staff = True
+        self.owner.save(update_fields=["is_staff"])
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.get("/api/users/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    def test_authenticated_user_can_get_own_profile(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.get("/api/users/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], str(self.owner.pk))
+        self.assertEqual(response.data["email"], self.owner.email)
+
     def test_authenticated_user_can_follow_public_playlist(self):
         self.api_client.force_authenticate(user=self.other)
         response = self.api_client.post(
@@ -64,3 +89,29 @@ class ApiAuthorizationTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(PlaylistFollow.objects.get().user, self.other)
+
+    @override_settings(MINIO_PUBLIC_ENDPOINT="localhost:9000")
+    def test_authenticated_user_can_upload_avatar(self):
+        image_buffer = BytesIO()
+        Image.new("RGB", (2, 2), color="blue").save(image_buffer, format="PNG")
+        avatar = SimpleUploadedFile(
+            "avatar.png",
+            image_buffer.getvalue(),
+            content_type="image/png",
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        with self.assertLogs("spotify.views", level="WARNING") as captured_logs:
+            response = self.api_client.post(
+                "/api/users/avatar/",
+                {"avatar": avatar},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("extension=.png", captured_logs.output[0])
+        self.assertIn("content_type=image/png", captured_logs.output[0])
+        self.assertIn("avatar_url", response.data)
+        self.assertTrue(response.data["avatar_url"].startswith("http://"))
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner.avatar_url, response.data["avatar_url"])

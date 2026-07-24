@@ -8,7 +8,9 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-development-key-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,10.0.2.2").split(
+        ","
+    )
     if host.strip()
 ]
 
@@ -65,7 +67,9 @@ DATABASES = {
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -85,9 +89,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
@@ -97,19 +99,44 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
 }
 
-# MinIO is S3-compatible. These settings become active whenever a FileField is
-# added; the current domain models store the requested object URLs directly.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "spotify": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "spotify-media")
+MINIO_PUBLIC_ENDPOINT = os.getenv(
+    "MINIO_PUBLIC_ENDPOINT", "http://10.0.2.2:9000"
+).strip()
+if not MINIO_PUBLIC_ENDPOINT.startswith(("http://", "https://")):
+    MINIO_PUBLIC_ENDPOINT = f"http://{MINIO_PUBLIC_ENDPOINT}"
+MINIO_PUBLIC_ENDPOINT = MINIO_PUBLIC_ENDPOINT.rstrip("/")
+
+# MinIO is S3-compatible. Uploaded objects use the internal endpoint while
+# API responses use MINIO_PUBLIC_ENDPOINT, which must be reachable by clients.
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
             "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
             "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-            "bucket_name": os.getenv("MINIO_BUCKET", "spotify-media"),
+            "bucket_name": MINIO_BUCKET,
             "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
             "region_name": os.getenv("MINIO_REGION", "us-east-1"),
             "default_acl": None,
-            "querystring_auth": True,
+            "querystring_auth": False,
             "file_overwrite": False,
         },
     },

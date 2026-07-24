@@ -46,6 +46,33 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 
+class AvatarUploadSerializer(serializers.Serializer):
+    avatar = serializers.ImageField(write_only=True)
+
+    def validate_avatar(self, avatar):
+        max_size = 5 * 1024 * 1024
+        if avatar.size > max_size:
+            raise serializers.ValidationError("Avatar size cannot exceed 5 MB.")
+        allowed_types = {"image/jpeg", "image/png", "image/webp"}
+        if avatar.content_type not in allowed_types:
+            raise serializers.ValidationError("Use a JPEG, PNG, or WebP image.")
+        return avatar
+
+
+class AvatarUploadResponseSerializer(serializers.Serializer):
+    avatar_url = serializers.URLField(read_only=True)
+
+
+class SubscriptionSerializer(serializers.Serializer):
+    months = serializers.ChoiceField(choices=(1, 3, 6, 12))
+
+
+class SubscriptionResponseSerializer(serializers.Serializer):
+    months_added = serializers.IntegerField(read_only=True)
+    premium_expires_at = serializers.DateTimeField(read_only=True)
+    has_active_premium = serializers.BooleanField(read_only=True)
+
+
 class SongSerializer(serializers.ModelSerializer):
     artist = UserSerializer(read_only=True)
 

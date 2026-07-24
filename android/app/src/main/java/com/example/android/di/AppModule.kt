@@ -11,6 +11,8 @@ import com.example.android.domain.home.HomeRepository
 import com.example.android.ui.screens.home.HomeViewModel
 import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.playback.PlaybackViewModel
+import com.example.android.data.downloads.DownloadRepository
+import com.example.android.ui.screens.downloads.DownloadsViewModel
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -38,9 +40,11 @@ val appModule = module {
             .create(SpotifyApi::class.java)
     }
     single { ProfileRepository(androidContext(), get(), get()) }
+    single { DownloadRepository(androidContext()) }
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
     viewModel { HomeViewModel(get()) }
-    viewModel { PlaybackViewModel(androidContext() as android.app.Application) }
+    viewModel { PlaybackViewModel(androidContext() as android.app.Application, get()) }
+    viewModel { DownloadsViewModel(get()) }
 }

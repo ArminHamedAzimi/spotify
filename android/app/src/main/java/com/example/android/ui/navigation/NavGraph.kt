@@ -38,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.android.ui.components.AppTopBar
 import com.example.android.ui.components.MiniPlayer
 import com.example.android.ui.screens.downloads.DownloadsScreen
+import com.example.android.ui.screens.downloads.DownloadsViewModel
 import com.example.android.ui.screens.home.HomeScreen
 import com.example.android.ui.screens.home.HomeEvent
 import com.example.android.ui.screens.home.HomeViewModel
@@ -68,8 +69,10 @@ fun SpotifyNavGraph(
     val profileViewModel: ProfileViewModel = koinViewModel()
     val homeViewModel: HomeViewModel = koinViewModel()
     val playbackViewModel: PlaybackViewModel = koinViewModel()
+    val downloadsViewModel: DownloadsViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(profileState.user?.id) {
         if (profileState.user != null) {
             homeViewModel.onEvent(HomeEvent.Refresh)
@@ -135,7 +138,12 @@ fun SpotifyNavGraph(
                 )
             }
             composable(Screen.Search.route) { SearchScreen() }
-            composable(Screen.Downloads.route) { DownloadsScreen() }
+            composable(Screen.Downloads.route) {
+                DownloadsScreen(
+                    state = downloadsState,
+                    onSongClick = playbackViewModel::play
+                )
+            }
             composable(Screen.Playlists.route) { PlaylistsScreen() }
             composable(Screen.Profile.route) {
                 ProfileScreen(profileViewModel = profileViewModel)
@@ -174,6 +182,17 @@ fun SpotifyNavGraph(
                     onSeek = playbackViewModel::seekTo,
                     onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
+                    isDownloaded = downloadsState.songs.any {
+                        it.id == playbackState.mediaId
+                    },
+                    isDownloading = playbackState.mediaId in downloadsState.activeDownloadIds,
+                    downloadMessageRes = downloadsState.messageRes,
+                    onDownload = {
+                        downloadsViewModel.download(
+                            playbackState,
+                            profileState.user?.hasActivePremium == true
+                        )
+                    },
                     onDismiss = { navController.popBackStack() }
                 )
             }

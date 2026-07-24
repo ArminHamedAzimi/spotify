@@ -86,4 +86,14 @@
     <string name="sleep_timer_off">خاموش</string>
     <string name="sleep_timer_minutes">%1$d دقیقه</string>
     <string name="sleep_timer_active">%1$d دقیقه</string>
+    <string name="download_song">دانلود آهنگ</string>
+    <string name="downloading">در حال دانلود…</string>
+    <string name="downloaded">دانلودشده</string>
+    <string name="download_started">دانلود آغاز شد. آهنگ و کاور برای پخش آفلاین ذخیره می‌شوند.</string>
+    <string name="download_complete">آهنگ و کاور با موفقیت دانلود شدند.</string>
+    <string name="download_failed">دانلود آهنگ انجام نشد.</string>
+    <string name="download_already_available">این آهنگ از قبل به‌صورت آفلاین موجود است.</string>
+    <string name="download_premium_required">دانلود آفلاین به اشتراک پریمیوم نیاز دارد. برای دانلود این آهنگ حساب خود را ارتقا دهید.</string>
+    <string name="downloads_empty">آهنگ‌های دانلودشده شما اینجا نمایش داده می‌شوند.</string>
+    <string name="downloaded_songs">آهنگ‌های دانلودشده</string>
 </resources>

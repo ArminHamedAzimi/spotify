@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.example.android.domain.home.Song
+import com.example.android.data.downloads.DownloadRepository
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,6 +34,7 @@ data class PlaybackUiState(
     val title: String = "",
     val artist: String = "",
     val artworkUrl: String? = null,
+    val audioUrl: String? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMillis: Long = 0L,
@@ -43,7 +45,10 @@ data class PlaybackUiState(
     val hasMedia: Boolean get() = mediaId != null
 }
 
-class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
+class PlaybackViewModel(
+    application: Application,
+    private val downloads: DownloadRepository
+) : AndroidViewModel(application) {
     private val controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
     private var progressJob: Job? = null
@@ -80,8 +85,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun play(song: Song) {
         val activeController = controller ?: return
+        val playableSong = downloads.resolve(song)
         viewModelScope.launch {
-            if (activeController.currentMediaItem?.mediaId == song.id) {
+            if (activeController.currentMediaItem?.mediaId == playableSong.id) {
                 if (activeController.playbackState == Player.STATE_ENDED) {
                     activeController.seekToDefaultPosition()
                 }
@@ -95,7 +101,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     PlaybackConfig.silentVolume
                 )
             }
-            activeController.setMediaItem(song.toMediaItem())
+            activeController.setMediaItem(playableSong.toMediaItem())
             activeController.prepare()
             activeController.volume = PlaybackConfig.silentVolume
             activeController.play()
@@ -176,6 +182,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             title = metadata.title?.toString().orEmpty(),
             artist = metadata.artist?.toString().orEmpty(),
             artworkUrl = metadata.artworkUri?.toString(),
+            audioUrl = player.currentMediaItem?.localConfiguration?.uri?.toString(),
             isPlaying = player.isPlaying,
             isBuffering = player.playbackState == Player.STATE_BUFFERING,
             positionMillis = player.currentPosition.coerceAtLeast(0L),

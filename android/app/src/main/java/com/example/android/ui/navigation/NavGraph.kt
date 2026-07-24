@@ -47,6 +47,8 @@ import com.example.android.ui.screens.home.HomeEvent
 import com.example.android.ui.screens.home.HomeViewModel
 import com.example.android.ui.screens.notifications.NotificationsScreen
 import com.example.android.ui.screens.playlists.PlaylistsScreen
+import com.example.android.ui.screens.playlists.PlaylistDetailScreen
+import com.example.android.ui.screens.playlists.PlaylistsViewModel
 import com.example.android.ui.screens.player.PlayerScreen
 import com.example.android.ui.screens.profile.ProfileScreen
 import com.example.android.ui.screens.profile.ProfileViewModel
@@ -74,26 +76,33 @@ fun SpotifyNavGraph(
     val homeViewModel: HomeViewModel = koinViewModel()
     val playbackViewModel: PlaybackViewModel = koinViewModel()
     val downloadsViewModel: DownloadsViewModel = koinViewModel()
+    val playlistsViewModel: PlaylistsViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
     val pagedDownloads = downloadsViewModel.pagedSongs.collectAsLazyPagingItems()
+    val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
+    val pagedPlaylists = playlistsViewModel.playlists.collectAsLazyPagingItems()
+    val pagedPlaylistSongs = playlistsViewModel.songs.collectAsLazyPagingItems()
     LaunchedEffect(profileState.user?.id) {
         val userId = profileState.user?.id
         playbackViewModel.setActiveUser(userId)
         downloadsViewModel.setActiveUser(userId)
         if (profileState.user != null) {
             homeViewModel.onEvent(HomeEvent.Refresh)
+            playlistsViewModel.refresh()
         }
     }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
     val isMainDestination = bottomNavItems.any { it.route == currentRoute }
+    val isPlaylistDetail = currentRoute == Screen.PlaylistDetail.route
+    val showAppBottomBar = isMainDestination || isPlaylistDetail
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (currentRoute != Screen.Player.route) {
+            if (currentRoute != Screen.Player.route && !isPlaylistDetail) {
                 AppTopBar(
                     isMainDestination = isMainDestination,
                     titleRes = when (currentRoute) {
@@ -109,7 +118,7 @@ fun SpotifyNavGraph(
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = isMainDestination,
+                visible = showAppBottomBar,
                 enter = fadeIn(
                     animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
                 ),
@@ -126,7 +135,7 @@ fun SpotifyNavGraph(
                         )
                     }
                     MelodifyBottomBar(
-                        currentRoute = currentRoute,
+                        currentRoute = if (isPlaylistDetail) Screen.Playlists.route else currentRoute,
                         user = profileState.user,
                         onNavigate = { screen ->
                             navController.navigate(screen.route) {
@@ -158,11 +167,33 @@ fun SpotifyNavGraph(
                 DownloadsScreen(
                     songs = pagedDownloads,
                     isPremium = profileState.user?.hasActivePremium == true,
-                    onSongClick = playbackViewModel::play,
+                    onSongClick = { song ->
+                        playbackViewModel.playFromDownloads(
+                            song,
+                            (0 until pagedDownloads.itemCount)
+                                .mapNotNull { pagedDownloads[it]?.toPlayableSong() }
+                        )
+                    },
                     onRemoveSong = downloadsViewModel::removeDownload
                 )
             }
-            composable(Screen.Playlists.route) { PlaylistsScreen() }
+            composable(Screen.Playlists.route) {
+                PlaylistsScreen(pagedPlaylists) {
+                    navController.navigate(Screen.PlaylistDetail.route(it))
+                }
+            }
+            composable(Screen.PlaylistDetail.route) { entry ->
+                val id = entry.arguments?.getString("playlistId") ?: return@composable
+                LaunchedEffect(id) { playlistsViewModel.load(id) }
+                PlaylistDetailScreen(
+                    playlistsState,
+                    pagedPlaylistSongs,
+                    playbackViewModel::playFromPlaylist,
+                    playbackViewModel::startPlaylist,
+                    playlistsViewModel::removeSong,
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Profile.route) {
                 ProfileScreen(profileViewModel = profileViewModel)
             }
@@ -200,6 +231,13 @@ fun SpotifyNavGraph(
                     onSeek = playbackViewModel::seekTo,
                     onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
+                    playlists = pagedPlaylists,
+                    addedMemberships = playlistsState.addedMemberships,
+                    onAddToPlaylist = playlistsViewModel::addSong,
+                    onCreatePlaylist = playlistsViewModel::create,
+                    onNext = playbackViewModel::next,
+                    onPrevious = playbackViewModel::previous,
+                    onShuffleChange = playbackViewModel::setShuffle,
                     isDownloaded = downloadsState.songs.any {
                         it.id == playbackState.mediaId
                     },

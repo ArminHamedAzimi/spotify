@@ -95,7 +95,13 @@ class Playlist(TimeStampedModel):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     is_public = models.BooleanField(default=False)
-    songs = models.ManyToManyField(Song, blank=True, related_name="playlists")
+    is_liked = models.BooleanField(default=False)
+    songs = models.ManyToManyField(
+        Song,
+        through="PlaylistSong",
+        related_name="playlists",
+        blank=True,
+    )
     followers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="PlaylistFollow",
@@ -114,10 +120,46 @@ class Playlist(TimeStampedModel):
                 fields=["owner", "title"],
                 name="unique_playlist_title_per_owner",
             ),
+            models.UniqueConstraint(
+                fields=["owner"],
+                condition=Q(is_liked=True),
+                name="unique_liked_playlist_per_owner",
+            ),
         ]
 
     def __str__(self):
         return self.title
+
+
+class PlaylistSong(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    playlist = models.ForeignKey(
+        Playlist,
+        on_delete=models.CASCADE,
+        related_name="song_entries",
+    )
+    song = models.ForeignKey(
+        Song,
+        on_delete=models.CASCADE,
+        related_name="playlist_entries",
+    )
+    position = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["position", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["playlist", "song"],
+                name="unique_song_per_playlist",
+            ),
+            models.UniqueConstraint(
+                fields=["playlist", "position"],
+                name="unique_playlist_song_position",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.playlist}: {self.song} ({self.position})"
 
 
 class PlaylistFollow(TimeStampedModel):

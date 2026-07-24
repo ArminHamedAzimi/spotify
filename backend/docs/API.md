@@ -55,8 +55,9 @@ creation, the OpenAPI schema, and Swagger UI.
 - Durations use Django REST Framework's duration format:
   `"[days] HH:MM:SS[.ffffff]"`. Examples are `"00:03:42"` and
   `"2 04:00:00"`.
-- List endpoints currently return a plain JSON array because pagination is not
-  enabled.
+- Paginated endpoints accept `page` and `page_size`. The default page size is
+  10 and the server-enforced maximum is 100. Their JSON envelope contains
+  `count`, `next`, `previous`, and `results`.
 - Fields documented as read-only must not be relied upon in request bodies.
   The server derives or manages them.
 
@@ -520,7 +521,15 @@ or a staff user can update or delete a song.
 GET /api/songs/
 ```
 
-Response — `200 OK`: an array of accessible song objects.
+Accepts `page` and `page_size`:
+
+```http
+GET /api/songs/?page=1&page_size=10
+```
+
+Response — `200 OK`: a pagination envelope whose `results` contains complete
+accessible song objects. Songs use stable `created_at` descending then UUID
+ordering.
 
 ### 5.2 Get the 10 most recently added songs
 
@@ -644,12 +653,53 @@ DELETE /api/songs/{id}/
 
 No JSON body. Success returns `204 No Content`.
 
+### 5.8 Get a random next song outside a playlist
+
+```http
+POST /api/songs/random-next/
+```
+
+Chooses a random accessible song for playback when the current song is not
+being played from a playlist. The current song is excluded so the response is
+another song.
+
+Request:
+
+```json
+{
+  "song_id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
+}
+```
+
+`song_id` may be `null` or omitted when there is no current song:
+
+```json
+{
+  "song_id": null
+}
+```
+
+Response — `200 OK`: one complete song object using the
+[Song JSON format](#song-json-format).
+
+If no other accessible song exists, the endpoint returns `404 Not Found`:
+
+```json
+{
+  "detail": "No other accessible song is available."
+}
+```
+
 ## 6. Playlist APIs
 
 Authenticated users can create playlists. The authenticated creator becomes
 the owner. Public playlists are visible to all authenticated users; private
 playlists are visible only to their owner and staff. Only the owner or staff
 can update or delete a playlist.
+
+Every user owns exactly one private playlist with `"is_liked": true`. Existing
+users receive it through a database migration and new users receive it during
+registration. Its default title is `Liked Songs`, and it cannot be deleted.
 
 ### Playlist JSON format
 
@@ -669,17 +719,18 @@ can update or delete a playlist.
   "title": "Morning Mix",
   "description": "Music for the morning commute",
   "is_public": true,
-  "songs": [
-    "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
-  ],
+  "is_liked": false,
+  "song_count": 28,
   "follower_count": 12,
   "created_at": "2026-07-23T18:00:00Z",
   "updated_at": "2026-07-23T18:00:00Z"
 }
 ```
 
-The `songs` field contains song UUIDs, not nested song objects.
-`owner`, `follower_count`, IDs, and timestamps are read-only.
+`song_count` lets Android display the playlist size without downloading song
+IDs. `owner`, `is_liked`, `song_count`, `follower_count`, IDs, and timestamps
+are read-only. Fetch complete songs through the dedicated paginated playlist
+songs endpoint.
 
 ### 6.1 List playlists
 
@@ -687,10 +738,60 @@ The `songs` field contains song UUIDs, not nested song objects.
 GET /api/playlists/
 ```
 
-Response — `200 OK`: an array containing public playlists and the current
-user's private playlists.
+Accepts `page` and `page_size`. Response — `200 OK`: a pagination envelope
+containing public playlists and the current user's private playlists. Ordering
+is stable: newest `created_at` first, then UUID.
 
-### 6.2 Create a playlist
+### 6.2 List the authenticated user's playlists
+
+```http
+GET /api/playlists/me/?page=1&page_size=10
+```
+
+Returns only playlists owned by the user identified by the JWT. This includes
+the user's private `Liked Songs` playlist and excludes public playlists owned
+by other users. Results are ordered newest first.
+
+There is no request body or user UUID path parameter.
+
+`page` starts at 1. `page_size` defaults to 10 and is capped at 100.
+
+Response — `200 OK`: a Paging 3-compatible pagination envelope:
+
+```json
+{
+  "count": 34,
+  "next": "http://10.0.2.2:8000/api/playlists/me/?page=2&page_size=10",
+  "previous": null,
+  "results": [
+    {
+      "id": "f11581a5-a501-427c-b2bd-abbca759097f",
+      "owner": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Ada Lovelace",
+        "email": "ada@example.com",
+        "premium_expires_at": null,
+        "has_active_premium": false,
+        "avatar_url": "https://media.example.com/avatars/ada.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "title": "Liked Songs",
+      "description": "Songs liked by this user.",
+      "is_public": false,
+      "is_liked": true,
+      "song_count": 28,
+      "follower_count": 0,
+      "created_at": "2026-07-24T10:00:00Z",
+      "updated_at": "2026-07-24T10:00:00Z"
+    }
+  ]
+}
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
+
+### 6.3 Create a playlist
 
 ```http
 POST /api/playlists/
@@ -702,16 +803,14 @@ Request:
 {
   "title": "Morning Mix",
   "description": "Music for the morning commute",
-  "is_public": true,
-  "songs": [
-    "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
-  ]
+  "is_public": true
 }
 ```
 
-The `songs` array may be empty. Response — `201 Created`: the complete playlist.
+The authenticated user becomes the owner. New playlists return
+`"song_count": 0`. Response — `201 Created`: the complete playlist.
 
-### 6.3 Get one playlist
+### 6.4 Get one playlist
 
 ```http
 GET /api/playlists/{id}/
@@ -719,7 +818,7 @@ GET /api/playlists/{id}/
 
 `{id}` is the playlist UUID. Response — `200 OK`: one playlist object.
 
-### 6.4 Replace a playlist
+### 6.5 Replace a playlist
 
 ```http
 PUT /api/playlists/{id}/
@@ -731,16 +830,13 @@ Request:
 {
   "title": "Updated Morning Mix",
   "description": "An updated description",
-  "is_public": false,
-  "songs": [
-    "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
-  ]
+  "is_public": false
 }
 ```
 
 Response — `200 OK`: the updated playlist.
 
-### 6.5 Partially update a playlist
+### 6.6 Partially update a playlist
 
 ```http
 PATCH /api/playlists/{id}/
@@ -750,20 +846,198 @@ Example:
 
 ```json
 {
-  "songs": []
+  "is_public": false
 }
 ```
 
 Response — `200 OK`: the updated playlist.
 
-### 6.6 Delete a playlist
+### 6.7 Delete a playlist
 
 ```http
 DELETE /api/playlists/{id}/
 ```
 
 No JSON body. Success returns `204 No Content`. Associated follow records are
-deleted automatically.
+and ordered song memberships are deleted automatically. Deleting the special
+Liked Songs playlist returns `400 Bad Request`:
+
+```json
+[
+  "The Liked Songs playlist cannot be deleted."
+]
+```
+
+### 6.8 List a playlist's songs with pagination
+
+```http
+GET /api/playlists/{playlist_id}/songs/?page=1&page_size=10
+```
+
+Returns complete song objects in stable playlist-membership position order.
+This avoids one additional API request per song. The playlist must be public,
+owned by the authenticated user, or accessible to staff.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 28,
+  "next": "http://10.0.2.2:8000/api/playlists/f11581a5-a501-427c-b2bd-abbca759097f/songs/?page=2&page_size=10",
+  "previous": null,
+  "results": [
+    {
+      "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+      "title": "Song title",
+      "artist": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Artist name",
+        "email": "artist@example.com",
+        "premium_expires_at": null,
+        "has_active_premium": false,
+        "avatar_url": "https://example.com/avatar.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "cover_image_url": "https://example.com/cover.jpg",
+      "audio_url": "https://example.com/song.mp3",
+      "duration": "00:03:42",
+      "is_published": true,
+      "created_at": "2026-07-23T17:40:00Z",
+      "updated_at": "2026-07-23T17:40:00Z"
+    }
+  ]
+}
+```
+
+`page_size` is capped at 100. An empty playlist returns the same envelope with
+`count: 0`, null navigation links, and an empty `results` array.
+
+### 6.9 Add a song to a playlist
+
+```http
+POST /api/playlists/{id}/songs/
+```
+
+`{id}` is the playlist UUID. Only its owner or a staff/admin user can add
+songs. The song is appended to the end of the playlist's playback order.
+
+Request:
+
+```json
+{
+  "song_id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
+}
+```
+
+The selected song must be published, owned by the current user, or accessible
+to staff. Response — `201 Created`: the complete added song object.
+
+Adding the same song twice returns `400 Bad Request`:
+
+```json
+{
+  "song_id": [
+    "Song is already in this playlist."
+  ]
+}
+```
+
+### 6.10 Remove a song from a playlist
+
+```http
+DELETE /api/playlists/{playlist_id}/songs/{song_id}/
+```
+
+Path fields:
+
+- `{playlist_id}` is the UUID of the playlist being modified.
+- `{song_id}` is the UUID of the song membership to remove.
+
+Only the playlist owner or a staff/admin user can perform this action. It
+removes the song from the playlist but does not delete the `Song` record or its
+MinIO audio and cover objects. It can also be used to unlike a song by removing
+it from the user's protected Liked Songs playlist.
+
+There is no request JSON body. Success returns `204 No Content` with an empty
+response body.
+
+If the song is not in the playlist, the endpoint returns `404 Not Found`:
+
+```json
+{
+  "detail": "Song is not in this playlist."
+}
+```
+
+A non-owner receives `403 Forbidden`. Missing or invalid JWT authentication
+returns `401 Unauthorized`.
+
+### 6.11 Get the next song in a playlist
+
+```http
+POST /api/playlists/{id}/next-song/
+```
+
+This endpoint is available to anyone who can read the playlist: the owner,
+staff, or any authenticated user for a public playlist.
+
+Request:
+
+```json
+{
+  "song_id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+  "shuffle": false
+}
+```
+
+Fields:
+
+- `song_id` is the currently playing song UUID. It may be `null` or omitted.
+- `shuffle` is optional and defaults to `false`.
+
+Start a playlist from its first ordered song:
+
+```json
+{
+  "song_id": null,
+  "shuffle": false
+}
+```
+
+Behavior:
+
+- When `song_id` is `null` or omitted and `shuffle` is `false`, the first
+  ordered song is returned.
+- When `song_id` is `null` or omitted and `shuffle` is `true`, a random song
+  from the playlist is returned. This supports starting playback in shuffle
+  mode with only `{"shuffle": true}`.
+- With `shuffle: false`, the next ordered song is returned.
+- At the end of the playlist, non-shuffle playback wraps to the first song.
+- With `shuffle: true`, a random playlist song other than the current one is
+  returned when the playlist has multiple songs.
+- A one-song playlist returns its only song in either mode.
+
+Response — `200 OK`: one complete song object using the
+[Song JSON format](#song-json-format).
+
+An empty playlist returns `404 Not Found`:
+
+```json
+{
+  "detail": "Playlist has no songs."
+}
+```
+
+If `song_id` is not part of the playlist, the endpoint returns `400 Bad
+Request`:
+
+```json
+{
+  "song_id": [
+    "The current song is not in this playlist."
+  ]
+}
 
 ## 7. Playlist-follow APIs
 

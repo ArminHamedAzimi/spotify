@@ -1,5 +1,6 @@
 from io import BytesIO
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -10,7 +11,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from .models import Playlist, PlaylistFollow, Song, User
+from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
 
 
 class PlaylistFollowTests(TestCase):
@@ -129,6 +130,189 @@ class ApiAuthorizationTests(TestCase):
         self.assertEqual(len(response.data), 10)
         self.assertEqual(response.data[0]["title"], "Song 11")
         self.assertEqual(response.data[-1]["title"], "Song 2")
+
+    def test_new_user_has_protected_liked_playlist(self):
+        liked = Playlist.objects.get(owner=self.owner, is_liked=True)
+        self.assertEqual(liked.title, "Liked Songs")
+        self.assertFalse(liked.is_public)
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.delete(f"/api/playlists/{liked.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_owner_can_create_and_delete_playlist(self):
+        self.api_client.force_authenticate(user=self.owner)
+        create_response = self.api_client.post(
+            "/api/playlists/",
+            {
+                "title": "Road Trip",
+                "description": "Driving music",
+                "is_public": False,
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        playlist_id = create_response.data["id"]
+        delete_response = self.api_client.delete(f"/api/playlists/{playlist_id}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_authenticated_user_can_list_only_owned_playlists(self):
+        Playlist.objects.create(
+            owner=self.other,
+            title="Other Public Playlist",
+            is_public=True,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get("/api/playlists/me/?page=1&page_size=10")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        self.assertTrue(response.data["results"])
+        self.assertTrue(
+            all(
+                item["owner"]["id"] == str(self.owner.pk)
+                for item in response.data["results"]
+            )
+        )
+        self.assertTrue(any(item["is_liked"] for item in response.data["results"]))
+        self.assertFalse(
+            any(
+                item["title"] == "Other Public Playlist"
+                for item in response.data["results"]
+            )
+        )
+        self.assertTrue(all("song_count" in item for item in response.data["results"]))
+
+    def test_owner_can_add_song_and_get_next_song(self):
+        first = Song.objects.create(
+            title="First",
+            artist=self.owner,
+            cover_image_url="https://media.example.com/first.jpg",
+            audio_url="https://media.example.com/first.mp3",
+            is_published=True,
+        )
+        second = Song.objects.create(
+            title="Second",
+            artist=self.owner,
+            cover_image_url="https://media.example.com/second.jpg",
+            audio_url="https://media.example.com/second.mp3",
+            is_published=True,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+        for song in (first, second):
+            response = self.api_client.post(
+                f"/api/playlists/{self.playlist.pk}/songs/",
+                {"song_id": str(song.pk)},
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        entries = PlaylistSong.objects.filter(playlist=self.playlist).order_by(
+            "position"
+        )
+        self.assertEqual(list(entries.values_list("position", flat=True)), [0, 1])
+
+        songs_page = self.api_client.get(
+            f"/api/playlists/{self.playlist.pk}/songs/?page=1&page_size=1"
+        )
+        self.assertEqual(songs_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(songs_page.data["count"], 2)
+        self.assertIsNotNone(songs_page.data["next"])
+        self.assertEqual(len(songs_page.data["results"]), 1)
+        self.assertEqual(songs_page.data["results"][0]["id"], str(first.pk))
+        self.assertIn("artist", songs_page.data["results"][0])
+        self.assertIn("audio_url", songs_page.data["results"][0])
+
+        start_response = self.api_client.post(
+            f"/api/playlists/{self.playlist.pk}/next-song/",
+            {"song_id": None, "shuffle": False},
+            format="json",
+        )
+        self.assertEqual(start_response.data["id"], str(first.pk))
+
+        with patch("spotify.views.random.choice", return_value=entries[1]):
+            shuffled_start_response = self.api_client.post(
+                f"/api/playlists/{self.playlist.pk}/next-song/",
+                {"shuffle": True},
+                format="json",
+            )
+        self.assertEqual(shuffled_start_response.data["id"], str(second.pk))
+
+        next_response = self.api_client.post(
+            f"/api/playlists/{self.playlist.pk}/next-song/",
+            {"song_id": str(first.pk), "shuffle": False},
+            format="json",
+        )
+        self.assertEqual(next_response.data["id"], str(second.pk))
+
+        with patch("spotify.views.random.choice", side_effect=lambda choices: choices[-1]):
+            shuffled_response = self.api_client.post(
+                f"/api/playlists/{self.playlist.pk}/next-song/",
+                {"song_id": str(first.pk), "shuffle": True},
+                format="json",
+            )
+        self.assertEqual(shuffled_response.data["id"], str(second.pk))
+
+        with patch("spotify.views.random.choice", return_value=second):
+            random_response = self.api_client.post(
+                "/api/songs/random-next/",
+                {"song_id": str(first.pk)},
+                format="json",
+            )
+        self.assertEqual(random_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(random_response.data["id"], str(second.pk))
+
+    def test_owner_can_remove_song_from_playlist(self):
+        song = Song.objects.create(
+            title="Removable",
+            artist=self.owner,
+            cover_image_url="https://media.example.com/removable.jpg",
+            audio_url="https://media.example.com/removable.mp3",
+            is_published=True,
+        )
+        PlaylistSong.objects.create(
+            playlist=self.playlist,
+            song=song,
+            position=0,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.delete(
+            f"/api/playlists/{self.playlist.pk}/songs/{song.pk}/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            PlaylistSong.objects.filter(playlist=self.playlist, song=song).exists()
+        )
+        self.assertTrue(Song.objects.filter(pk=song.pk).exists())
+
+    def test_non_owner_cannot_remove_song_from_playlist(self):
+        song = Song.objects.create(
+            title="Owner Only",
+            artist=self.owner,
+            cover_image_url="https://media.example.com/owner-only.jpg",
+            audio_url="https://media.example.com/owner-only.mp3",
+            is_published=True,
+        )
+        PlaylistSong.objects.create(
+            playlist=self.playlist,
+            song=song,
+            position=0,
+        )
+        self.api_client.force_authenticate(user=self.other)
+
+        response = self.api_client.delete(
+            f"/api/playlists/{self.playlist.pk}/songs/{song.pk}/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(
+            PlaylistSong.objects.filter(playlist=self.playlist, song=song).exists()
+        )
 
     def test_authenticated_user_can_follow_public_playlist(self):
         self.api_client.force_authenticate(user=self.other)

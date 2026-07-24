@@ -13,6 +13,8 @@ import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.playback.PlaybackViewModel
 import com.example.android.data.downloads.DownloadRepository
 import com.example.android.ui.screens.downloads.DownloadsViewModel
+import com.example.android.data.playlists.PlaylistRepository
+import com.example.android.ui.screens.playlists.PlaylistsViewModel
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -41,10 +43,12 @@ val appModule = module {
     }
     single { ProfileRepository(androidContext(), get(), get()) }
     single { DownloadRepository(androidContext()) }
+    single { PlaylistRepository(get(), get()) }
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
     viewModel { HomeViewModel(get()) }
-    viewModel { PlaybackViewModel(androidContext() as android.app.Application, get()) }
+    viewModel { PlaybackViewModel(androidContext() as android.app.Application, get(), get()) }
     viewModel { DownloadsViewModel(get()) }
+    viewModel { PlaylistsViewModel(get()) }
 }

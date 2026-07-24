@@ -99,4 +99,11 @@
     <string name="download_playback_premium_required">Your downloads are saved, but playback from this tab requires an active Premium subscription.</string>
     <string name="remove_download">Remove download</string>
     <string name="download_removed">The offline song and cover were removed from this device.</string>
+    <string name="my_playlists">My playlists</string>
+    <string name="playlist_song_count">%1$d songs</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="new_playlist">New playlist name</string>
+    <string name="create">Create</string>
+    <string name="remove_from_playlist">Remove from playlist</string>
 </resources>

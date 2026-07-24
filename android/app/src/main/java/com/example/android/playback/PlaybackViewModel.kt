@@ -17,6 +17,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.example.android.domain.home.Song
 import com.example.android.data.downloads.DownloadRepository
+import com.example.android.data.playlists.PlaylistRepository
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,14 +42,16 @@ data class PlaybackUiState(
     val positionMillis: Long = 0L,
     val durationMillis: Long = 0L,
     val playbackSpeed: Float = PlaybackConfig.playbackSpeeds.first(),
-    val sleepTimerMinutes: Int? = null
+    val sleepTimerMinutes: Int? = null,
+    val isShuffleEnabled: Boolean = false
 ) {
     val hasMedia: Boolean get() = mediaId != null
 }
 
 class PlaybackViewModel(
     application: Application,
-    private val downloads: DownloadRepository
+    private val downloads: DownloadRepository,
+    private val playlists: PlaylistRepository
 ) : AndroidViewModel(application) {
     private val controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
@@ -56,6 +59,10 @@ class PlaybackViewModel(
     private var sleepTimerJob: Job? = null
     private var selectedSleepTimerMinutes: Int? = null
     private var activeUserId: String? = null
+    private var currentSong: Song? = null
+    private val history = ArrayDeque<Song>()
+    private var source: PlaybackSource = PlaybackSource.General()
+    private var advancing = false
 
     private val _uiState = MutableStateFlow(PlaybackUiState())
     val uiState: StateFlow<PlaybackUiState> = _uiState.asStateFlow()
@@ -63,6 +70,7 @@ class PlaybackViewModel(
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             updateState(player)
+            if (player.playbackState == Player.STATE_ENDED && !advancing) next()
         }
     }
 
@@ -86,6 +94,32 @@ class PlaybackViewModel(
     }
 
     fun play(song: Song) {
+        selectSong(song, PlaybackSource.General())
+    }
+
+    fun playFromPlaylist(song: Song, playlistId: String, shuffle: Boolean) {
+        selectSong(song, PlaybackSource.Playlist(playlistId, shuffle))
+    }
+
+    fun startPlaylist(playlistId: String, shuffle: Boolean) {
+        viewModelScope.launch {
+            runCatching { playlists.playlistNext(playlistId, null, shuffle) }
+                .onSuccess { selectSong(it, PlaybackSource.Playlist(playlistId, shuffle)) }
+                .onFailure { Log.e(PLAYBACK_LOG_TAG, "Unable to start playlist", it) }
+        }
+    }
+
+    fun playFromDownloads(song: Song, songs: List<Song>) {
+        selectSong(song, PlaybackSource.Downloads(songs))
+    }
+
+    private fun selectSong(song: Song, newSource: PlaybackSource, recordHistory: Boolean = true) {
+        if (recordHistory) currentSong?.let(history::addLast)
+        currentSong = song
+        source = newSource
+        _uiState.update {
+            it.copy(isShuffleEnabled = newSource.shuffle)
+        }
         val activeController = controller ?: return
         val playableSong = downloads.resolve(song, activeUserId)
         viewModelScope.launch {
@@ -122,6 +156,53 @@ class PlaybackViewModel(
                 Log.e(PLAYBACK_LOG_TAG, "Unable to start selected song", error)
                 updateState(activeController)
             }
+        }
+    }
+
+    fun next() {
+        val current = currentSong ?: return
+        if (advancing) return
+        advancing = true
+        viewModelScope.launch {
+            try {
+                val next = when (val activeSource = source) {
+                    is PlaybackSource.Playlist -> playlists.playlistNext(
+                        activeSource.id, current.id, activeSource.shuffle
+                    )
+                    is PlaybackSource.Downloads -> {
+                        if (activeSource.shuffle) {
+                            activeSource.songs.filterNot { it.id == current.id }.randomOrNull()
+                                ?: activeSource.songs.firstOrNull()
+                        } else {
+                            val index = activeSource.songs.indexOfFirst { it.id == current.id }
+                            activeSource.songs.getOrNull(index + 1)
+                                ?: activeSource.songs.firstOrNull()
+                        }
+                    }
+                    is PlaybackSource.General -> playlists.randomNext(current.id)
+                }
+                next?.let { selectSong(it, source) }
+            } catch (error: Exception) {
+                Log.e(PLAYBACK_LOG_TAG, "Unable to load next song", error)
+            } finally {
+                advancing = false
+            }
+        }
+    }
+
+    fun previous() {
+        val previous = history.removeLastOrNull() ?: return
+        selectSong(previous, source, recordHistory = false)
+    }
+
+    fun setShuffle(enabled: Boolean) {
+        source = when (val active = source) {
+            is PlaybackSource.Playlist -> active.copy(shuffle = enabled)
+            is PlaybackSource.Downloads -> active.copy(shuffle = enabled)
+            is PlaybackSource.General -> active.copy(shuffle = enabled)
+        }
+        _uiState.update {
+            it.copy(isShuffleEnabled = source.shuffle)
         }
     }
 
@@ -213,7 +294,8 @@ class PlaybackViewModel(
             positionMillis = player.currentPosition.coerceAtLeast(0L),
             durationMillis = duration,
             playbackSpeed = player.playbackParameters.speed,
-            sleepTimerMinutes = selectedSleepTimerMinutes
+            sleepTimerMinutes = selectedSleepTimerMinutes,
+            isShuffleEnabled = source.shuffle
         )
     }
 
@@ -247,3 +329,14 @@ class PlaybackViewModel(
 }
 
 private const val PLAYBACK_LOG_TAG = "PlaybackViewModel"
+
+private sealed interface PlaybackSource {
+    val shuffle: Boolean
+
+    data class General(override val shuffle: Boolean = false) : PlaybackSource
+    data class Playlist(val id: String, override val shuffle: Boolean) : PlaybackSource
+    data class Downloads(
+        val songs: List<Song>,
+        override val shuffle: Boolean = false
+    ) : PlaybackSource
+}

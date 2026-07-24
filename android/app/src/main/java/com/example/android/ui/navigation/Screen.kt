@@ -26,6 +26,9 @@ sealed class Screen(
     data object Notifications : Screen("notifications", R.string.notifications, Icons.Filled.Notifications)
     data object Settings : Screen("settings", R.string.settings, Icons.Filled.Settings)
     data object Player : Screen("player", R.string.player, Icons.Filled.PlayCircle)
+    data object PlaylistDetail : Screen("playlist/{playlistId}", R.string.tab_playlists, Icons.Filled.LibraryMusic) {
+        fun route(id: String) = "playlist/$id"
+    }
 }
 
 val bottomNavItems = listOf(

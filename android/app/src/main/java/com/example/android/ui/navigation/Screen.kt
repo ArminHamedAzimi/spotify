@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.android.R
 
@@ -29,6 +30,12 @@ sealed class Screen(
     data object PlaylistDetail : Screen("playlist/{playlistId}", R.string.tab_playlists, Icons.Filled.LibraryMusic) {
         fun route(id: String) = "playlist/$id"
     }
+    data object PublicProfile : Screen("public-profile", R.string.profile, Icons.Filled.Person)
+    data object Connections : Screen("connections/{type}", R.string.followers, Icons.Filled.Person) {
+        fun route(type: String) = "connections/$type"
+    }
+    data object Conversations : Screen("conversations", R.string.messages, Icons.Filled.Chat)
+    data object Chat : Screen("chat", R.string.message, Icons.Filled.Chat)
 }
 
 val bottomNavItems = listOf(

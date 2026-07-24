@@ -1,5 +1,6 @@
 package com.example.android.ui.navigation
 
+import com.example.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,13 @@ import com.example.android.ui.screens.profile.ProfileScreen
 import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.ui.screens.search.SearchScreen
 import com.example.android.ui.screens.search.SearchViewModel
+import com.example.android.ui.screens.social.SocialViewModel
+import com.example.android.ui.screens.social.PublicProfileScreen
+import com.example.android.ui.screens.social.ConnectionsScreen
+import com.example.android.data.social.ConnectionType
+import com.example.android.ui.screens.chat.ChatViewModel
+import com.example.android.ui.screens.chat.ChatScreen
+import com.example.android.ui.screens.chat.ConversationsScreen
 import com.example.android.ui.screens.settings.SettingsScreen
 import com.example.android.ui.theme.ThemeMode
 import com.example.android.ui.theme.AppDimens
@@ -79,6 +87,8 @@ fun SpotifyNavGraph(
     val downloadsViewModel: DownloadsViewModel = koinViewModel()
     val playlistsViewModel: PlaylistsViewModel = koinViewModel()
     val searchViewModel: SearchViewModel = koinViewModel()
+    val socialViewModel: SocialViewModel = koinViewModel()
+    val chatViewModel: ChatViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
@@ -90,10 +100,17 @@ fun SpotifyNavGraph(
     val searchedProfiles = searchViewModel.profiles.collectAsLazyPagingItems()
     val searchedSongs = searchViewModel.songs.collectAsLazyPagingItems()
     val searchHistory by searchViewModel.history.collectAsStateWithLifecycle(emptyList())
+    val socialState by socialViewModel.state.collectAsStateWithLifecycle()
+    val publicPlaylists = socialViewModel.publicPlaylists.collectAsLazyPagingItems()
+    val connections = socialViewModel.connections.collectAsLazyPagingItems()
+    val chatState by chatViewModel.state.collectAsStateWithLifecycle()
+    val conversations = chatViewModel.conversations.collectAsLazyPagingItems()
     LaunchedEffect(profileState.user?.id) {
         val userId = profileState.user?.id
         playbackViewModel.setActiveUser(userId)
         downloadsViewModel.setActiveUser(userId)
+        socialViewModel.setCurrentUser(userId)
+        chatViewModel.setCurrentUser(userId)
         if (profileState.user != null) {
             homeViewModel.onEvent(HomeEvent.Refresh)
             playlistsViewModel.refresh()
@@ -103,12 +120,20 @@ fun SpotifyNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
     val isMainDestination = bottomNavItems.any { it.route == currentRoute }
     val isPlaylistDetail = currentRoute == Screen.PlaylistDetail.route
-    val showAppBottomBar = isMainDestination || isPlaylistDetail
+    val isSocialDestination = currentRoute == Screen.PublicProfile.route ||
+        currentRoute == Screen.Connections.route
+    val isChatDestination = currentRoute == Screen.Conversations.route ||
+        currentRoute == Screen.Chat.route
+    val showAppBottomBar =
+        isMainDestination || isPlaylistDetail || isSocialDestination || isChatDestination
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (currentRoute != Screen.Player.route && !isPlaylistDetail) {
+            if (
+                currentRoute != Screen.Player.route && !isPlaylistDetail &&
+                !isSocialDestination && !isChatDestination
+            ) {
                 AppTopBar(
                     isMainDestination = isMainDestination,
                     titleRes = when (currentRoute) {
@@ -117,6 +142,7 @@ fun SpotifyNavGraph(
                         else -> null
                     },
                     onBackClick = { navController.popBackStack() },
+                    onMessagesClick = { navController.navigate(Screen.Conversations.route) },
                     onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
                     onSettingsClick = { navController.navigate(Screen.Settings.route) }
                 )
@@ -141,7 +167,12 @@ fun SpotifyNavGraph(
                         )
                     }
                     MelodifyBottomBar(
-                        currentRoute = if (isPlaylistDetail) Screen.Playlists.route else currentRoute,
+                        currentRoute = when {
+                            isPlaylistDetail -> Screen.Playlists.route
+                            isSocialDestination -> Screen.Search.route
+                            isChatDestination -> Screen.Search.route
+                            else -> currentRoute
+                        },
                         user = profileState.user,
                         onNavigate = { screen ->
                             navController.navigate(screen.route) {
@@ -179,7 +210,38 @@ fun SpotifyNavGraph(
                     onCommitQuery = searchViewModel::saveCurrentQuery,
                     onHistoryClick = searchViewModel::useHistory,
                     onRemoveHistory = searchViewModel::removeHistory,
+                    followedUserIds = socialState.followedUserIds,
+                    currentUserId = socialState.currentUserId,
+                    onProfileClick = {
+                        socialViewModel.openProfile(it)
+                        navController.navigate(Screen.PublicProfile.route)
+                    },
+                    onToggleFollow = socialViewModel::toggleFollow,
                     onSongClick = playbackViewModel::play
+                )
+            }
+            composable(Screen.Conversations.route) {
+                ConversationsScreen(
+                    conversations = conversations,
+                    onBack = { navController.popBackStack() },
+                    onConversation = {
+                        chatViewModel.open(it)
+                        navController.navigate(Screen.Chat.route)
+                    }
+                )
+            }
+            composable(Screen.Chat.route) {
+                ChatScreen(
+                    state = chatState,
+                    currentSongId = playbackState.mediaId,
+                    onBack = {
+                        chatViewModel.close()
+                        navController.popBackStack()
+                    },
+                    onDraftChange = chatViewModel::setDraft,
+                    onSend = chatViewModel::send,
+                    onShareSong = chatViewModel::shareSong,
+                    onPlaySong = playbackViewModel::play
                 )
             }
             composable(Screen.Downloads.route) {
@@ -210,8 +272,55 @@ fun SpotifyNavGraph(
                     playbackViewModel::playFromPlaylist,
                     playbackViewModel::startPlaylist,
                     playlistsViewModel::removeSong,
+                    playlistsViewModel::updateVisibility,
+                    canEdit = playlistsState.selected?.owner?.id == profileState.user?.id,
                     onBack = { navController.popBackStack() }
                 )
+            }
+            composable(Screen.PublicProfile.route) {
+                PublicProfileScreen(
+                    state = socialState,
+                    playlists = publicPlaylists,
+                    onBack = { navController.popBackStack() },
+                    onToggleFollow = socialViewModel::toggleFollow,
+                    onMessage = {
+                        chatViewModel.open(it)
+                        navController.navigate(Screen.Chat.route)
+                    },
+                    onConnections = { userId, type ->
+                        socialViewModel.showConnections(userId, type)
+                        navController.navigate(Screen.Connections.route(type.name))
+                    },
+                    onPlaylist = { navController.navigate(Screen.PlaylistDetail.route(it)) }
+                )
+            }
+            composable(Screen.Connections.route) { entry ->
+                val type = runCatching {
+                    ConnectionType.valueOf(
+                        entry.arguments?.getString("type").orEmpty()
+                    )
+                }.getOrDefault(ConnectionType.Followers)
+                val profile = socialState.selectedProfile
+                if (profile != null) {
+                    LaunchedEffect(profile.id, type) {
+                        socialViewModel.showConnections(profile.id, type)
+                    }
+                    ConnectionsScreen(
+                        title = stringResource(
+                            if (type == ConnectionType.Followers) R.string.followers
+                            else R.string.following
+                        ),
+                        users = connections,
+                        followedIds = socialState.followedUserIds,
+                        currentUserId = socialState.currentUserId,
+                        onBack = { navController.popBackStack() },
+                        onProfile = {
+                            socialViewModel.openProfile(it)
+                            navController.navigate(Screen.PublicProfile.route)
+                        },
+                        onToggleFollow = socialViewModel::toggleFollow
+                    )
+                }
             }
             composable(Screen.Profile.route) {
                 ProfileScreen(profileViewModel = profileViewModel)

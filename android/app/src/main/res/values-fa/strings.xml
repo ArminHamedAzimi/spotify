@@ -115,4 +115,20 @@
     <string name="search_failed">بارگذاری جستجو انجام نشد</string>
     <string name="search_history">جستجوهای اخیر</string>
     <string name="remove_search_history">حذف از تاریخچه جستجو</string>
+    <string name="follow">دنبال کردن</string>
+    <string name="unfollow">لغو دنبال کردن</string>
+    <string name="followers">دنبال‌کنندگان</string>
+    <string name="following">دنبال‌شوندگان</string>
+    <string name="public_playlists">پلی‌لیست‌های عمومی</string>
+    <string name="public_playlist">پلی‌لیست عمومی</string>
+    <string name="private_playlist">پلی‌لیست خصوصی</string>
+    <string name="messages">پیام‌ها</string>
+    <string name="message">پیام</string>
+    <string name="start_conversation">شروع گفتگو</string>
+    <string name="shared_song">یک آهنگ به اشتراک گذاشت</string>
+    <string name="is_typing">در حال نوشتن…</string>
+    <string name="message_hint">پیامی بنویسید</string>
+    <string name="send_message">ارسال پیام</string>
+    <string name="share_current_song">اشتراک‌گذاری آهنگ در حال پخش</string>
+    <string name="message_status">وضعیت پیام</string>
 </resources>

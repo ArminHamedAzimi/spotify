@@ -19,6 +19,12 @@ import com.example.android.data.search.SearchRepository
 import com.example.android.ui.screens.search.SearchViewModel
 import com.example.android.data.search.SearchHistoryDatabase
 import androidx.room.Room
+import com.example.android.data.social.SocialRepository
+import com.example.android.ui.screens.social.SocialViewModel
+import com.example.android.data.chat.ChatRepository
+import com.example.android.data.chat.CHAT_MIGRATION_1_2
+import com.example.android.data.chat.CHAT_MIGRATION_2_3
+import com.example.android.ui.screens.chat.ChatViewModel
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -33,9 +39,10 @@ val appModule = module {
             androidContext(),
             SearchHistoryDatabase::class.java,
             "search-history.db"
-        ).build()
+        ).addMigrations(CHAT_MIGRATION_1_2, CHAT_MIGRATION_2_3).build()
     }
     single { get<SearchHistoryDatabase>().historyDao() }
+    single { get<SearchHistoryDatabase>().chatMessageDao() }
     single {
         OkHttpClient.Builder()
             .addInterceptor(
@@ -57,6 +64,8 @@ val appModule = module {
     single { DownloadRepository(androidContext()) }
     single { PlaylistRepository(get(), get()) }
     single { SearchRepository(get(), get(), get()) }
+    single { SocialRepository(get(), get()) }
+    single { ChatRepository(get(), get(), get(), get()) }
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
@@ -65,4 +74,6 @@ val appModule = module {
     viewModel { DownloadsViewModel(get()) }
     viewModel { PlaylistsViewModel(get()) }
     viewModel { SearchViewModel(get()) }
+    viewModel { SocialViewModel(get()) }
+    viewModel { ChatViewModel(get()) }
 }

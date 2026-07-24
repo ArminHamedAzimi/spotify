@@ -75,6 +75,13 @@ class PlaybackViewModel(
     }
 
     init {
+        viewModelScope.launch {
+            PlaybackCommandBus.commands.collect { command ->
+                when (command) {
+                    PlaybackCommand.Next -> next()
+                }
+            }
+        }
         val token = SessionToken(
             application,
             ComponentName(application, PlaybackService::class.java)

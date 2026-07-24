@@ -77,4 +77,11 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
             { repository.invalidateSongs() }
         )
     }
+
+    fun updateVisibility(playlistId: String, isPublic: Boolean) = viewModelScope.launch {
+        runCatching { repository.updateVisibility(playlistId, isPublic) }.onSuccess { playlist ->
+            _state.update { it.copy(selected = playlist) }
+            repository.invalidatePlaylists()
+        }
+    }
 }

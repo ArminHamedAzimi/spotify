@@ -33,6 +33,42 @@ interface SpotifyApi {
         @Query("page_size") pageSize: Int
     ): PaginatedResponse<PublicProfileDto>
 
+    @POST("users/{id}/follow/")
+    suspend fun followUser(
+        @Header("Authorization") authorization: String,
+        @Path("id") userId: String
+    ): UserFollowDto
+
+    @DELETE("users/{id}/follow/")
+    suspend fun unfollowUser(
+        @Header("Authorization") authorization: String,
+        @Path("id") userId: String
+    )
+
+    @GET("users/{id}/followers/")
+    suspend fun userFollowers(
+        @Header("Authorization") authorization: String,
+        @Path("id") userId: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<PublicProfileDto>
+
+    @GET("users/{id}/following/")
+    suspend fun userFollowing(
+        @Header("Authorization") authorization: String,
+        @Path("id") userId: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<PublicProfileDto>
+
+    @GET("users/{id}/playlists/")
+    suspend fun userPublicPlaylists(
+        @Header("Authorization") authorization: String,
+        @Path("id") userId: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<PlaylistDto>
+
     @PATCH("users/{id}/")
     suspend fun updateUser(
         @Header("Authorization") authorization: String,
@@ -85,6 +121,13 @@ interface SpotifyApi {
         @Path("id") playlistId: String
     ): PlaylistDto
 
+    @PATCH("playlists/{id}/visibility/")
+    suspend fun updatePlaylistVisibility(
+        @Header("Authorization") authorization: String,
+        @Path("id") playlistId: String,
+        @Body request: PlaylistVisibilityRequest
+    ): PlaylistDto
+
     @GET("playlists/{id}/songs/")
     suspend fun playlistSongs(
         @Header("Authorization") authorization: String,
@@ -125,4 +168,25 @@ interface SpotifyApi {
         @Header("Authorization") authorization: String,
         @Body request: RandomNextRequest
     ): SongDto
+
+    @GET("chat/conversations/")
+    suspend fun conversations(
+        @Header("Authorization") authorization: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<ConversationDto>
+
+    @GET("chat/users/{id}/messages/")
+    suspend fun chatMessages(
+        @Header("Authorization") authorization: String,
+        @Path("id") otherUserId: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<ChatMessageDto>
+
+    @POST("chat/messages/{id}/read/")
+    suspend fun markChatMessageRead(
+        @Header("Authorization") authorization: String,
+        @Path("id") messageId: String
+    ): ChatMessageDto
 }

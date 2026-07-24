@@ -48,3 +48,8 @@ object AppDimens {
     val playerMainControlSize = 64.dp
     val playerSecondaryControlSize = 48.dp
 }
+
+object ChatVisuals {
+    const val messageWidthFraction = 0.82f
+    const val songCardSurfaceAlpha = 0.72f
+}

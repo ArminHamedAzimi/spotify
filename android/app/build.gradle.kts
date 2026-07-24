@@ -68,6 +68,7 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")
+    implementation("androidx.room:room-paging:2.7.2")
     annotationProcessor("androidx.room:room-compiler:2.7.2")
     debugImplementation("com.github.chuckerteam.chucker:library:4.3.0")
     releaseImplementation("com.github.chuckerteam.chucker:library-no-op:4.3.0")

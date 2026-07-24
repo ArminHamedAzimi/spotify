@@ -115,4 +115,20 @@
     <string name="search_failed">Search could not be loaded</string>
     <string name="search_history">Recent searches</string>
     <string name="remove_search_history">Remove from search history</string>
+    <string name="follow">Follow</string>
+    <string name="unfollow">Unfollow</string>
+    <string name="followers">Followers</string>
+    <string name="following">Following</string>
+    <string name="public_playlists">Public playlists</string>
+    <string name="public_playlist">Public playlist</string>
+    <string name="private_playlist">Private playlist</string>
+    <string name="messages">Messages</string>
+    <string name="message">Message</string>
+    <string name="start_conversation">Start a conversation</string>
+    <string name="shared_song">Shared a song</string>
+    <string name="is_typing">is typing…</string>
+    <string name="message_hint">Write a message</string>
+    <string name="send_message">Send message</string>
+    <string name="share_current_song">Share current song</string>
+    <string name="message_status">Message status</string>
 </resources>

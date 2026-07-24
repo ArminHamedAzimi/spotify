@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ fun AppTopBar(
     isMainDestination: Boolean,
     @StringRes titleRes: Int?,
     onBackClick: () -> Unit,
+    onMessagesClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -86,6 +88,13 @@ fun AppTopBar(
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceLarge),
                 modifier = Modifier.padding(end = AppDimens.spaceMedium)
             ) {
+                TonalIconButton(onClick = onMessagesClick) {
+                    Icon(
+                        Icons.Filled.Chat,
+                        contentDescription = stringResource(R.string.messages),
+                        modifier = Modifier.size(AppDimens.actionIconSize)
+                    )
+                }
                 TonalIconButton(onClick = onNotificationsClick) {
                     Icon(
                         Icons.Filled.Notifications,

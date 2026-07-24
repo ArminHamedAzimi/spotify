@@ -47,6 +47,10 @@ fun SearchScreen(
     onCommitQuery: () -> Unit,
     onHistoryClick: (SearchHistoryEntity) -> Unit,
     onRemoveHistory: (SearchHistoryEntity) -> Unit,
+    followedUserIds: Set<String>,
+    currentUserId: String?,
+    onProfileClick: (PublicProfileDto) -> Unit,
+    onToggleFollow: (String) -> Unit,
     onSongClick: (Song) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -112,7 +116,13 @@ fun SearchScreen(
                 )
             }
         } else if (state.type == SearchType.Profiles) {
-            ProfileResults(profiles)
+            ProfileResults(
+                profiles,
+                followedUserIds,
+                currentUserId,
+                onProfileClick,
+                onToggleFollow
+            )
         } else {
             SongResults(songs) {
                 focusManager.clearFocus()
@@ -185,7 +195,13 @@ private fun ColumnScope.SearchHistory(
 }
 
 @Composable
-private fun ColumnScope.ProfileResults(profiles: LazyPagingItems<PublicProfileDto>) {
+private fun ColumnScope.ProfileResults(
+    profiles: LazyPagingItems<PublicProfileDto>,
+    followedUserIds: Set<String>,
+    currentUserId: String?,
+    onProfileClick: (PublicProfileDto) -> Unit,
+    onToggleFollow: (String) -> Unit
+) {
     PagedResultContainer(
         items = profiles,
         emptyLabel = R.string.search_no_profiles
@@ -201,6 +217,7 @@ private fun ColumnScope.ProfileResults(profiles: LazyPagingItems<PublicProfileDt
             ) { index ->
                 val profile = profiles[index] ?: return@items
                 Surface(
+                    modifier = Modifier.clickable { onProfileClick(profile) },
                     shape = MaterialTheme.shapes.large,
                     color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
@@ -223,6 +240,16 @@ private fun ColumnScope.ProfileResults(profiles: LazyPagingItems<PublicProfileDt
                                 contentDescription = stringResource(R.string.premium_member),
                                 tint = MaterialTheme.colorScheme.primary
                             )
+                        }
+                        if (profile.id != currentUserId) {
+                            FilledTonalButton(onClick = { onToggleFollow(profile.id) }) {
+                                Text(
+                                    stringResource(
+                                        if (profile.id in followedUserIds) R.string.unfollow
+                                        else R.string.follow
+                                    )
+                                )
+                            }
                         }
                     }
                 }

@@ -55,6 +55,9 @@ class PlaylistRepository(
     suspend fun removeSong(playlistId: String, songId: String) = authenticated {
         api.removeSongFromPlaylist(it, playlistId, songId)
     }
+    suspend fun updateVisibility(playlistId: String, isPublic: Boolean) = authenticated {
+        api.updatePlaylistVisibility(it, playlistId, PlaylistVisibilityRequest(isPublic))
+    }
     suspend fun playlistNext(playlistId: String, songId: String?, shuffle: Boolean) =
         authenticated { api.playlistNextSong(it, playlistId, NextSongRequest(songId, shuffle)).toDomain() }
     suspend fun randomNext(songId: String?) =

@@ -142,6 +142,8 @@ fun PlaylistDetailScreen(
     onPlay: (Song, String, Boolean) -> Unit,
     onStart: (String, Boolean) -> Unit,
     onRemove: (String, String) -> Unit,
+    onVisibilityChange: (String, Boolean) -> Unit,
+    canEdit: Boolean,
     onBack: () -> Unit
 ) {
     val playlist = state.selected
@@ -183,6 +185,26 @@ fun PlaylistDetailScreen(
                     Icon(Icons.Rounded.Shuffle, null); Text(stringResource(R.string.shuffle))
                 }
             }
+            if (canEdit && !playlist.isLiked) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = AppDimens.spaceSmall),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(
+                            if (playlist.isPublic) R.string.public_playlist
+                            else R.string.private_playlist
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = playlist.isPublic,
+                        onCheckedChange = { onVisibilityChange(playlist.id, it) }
+                    )
+                }
+            }
         }
         items(
             count = songs.itemCount,
@@ -191,7 +213,7 @@ fun PlaylistDetailScreen(
             val song = songs[index] ?: return@items
             val dismissState = rememberSwipeToDismissBoxState(
                 confirmValueChange = { value ->
-                    if (value != SwipeToDismissBoxValue.Settled) {
+                    if (canEdit && value != SwipeToDismissBoxValue.Settled) {
                         onRemove(playlist.id, song.id)
                         true
                     } else {
@@ -201,8 +223,8 @@ fun PlaylistDetailScreen(
             )
             SwipeToDismissBox(
                 state = dismissState,
-                enableDismissFromStartToEnd = true,
-                enableDismissFromEndToStart = true,
+                enableDismissFromStartToEnd = canEdit,
+                enableDismissFromEndToStart = canEdit,
                 backgroundContent = {
                     val alignment =
                         if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {

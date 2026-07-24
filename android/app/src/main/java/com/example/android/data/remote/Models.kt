@@ -18,6 +18,16 @@ data class PublicProfileDto(
     @SerializedName("has_active_premium") val hasActivePremium: Boolean
 )
 
+data class UserFollowDto(
+    val id: String,
+    val follower: PublicProfileDto,
+    val following: PublicProfileDto
+)
+
+data class PlaylistVisibilityRequest(
+    @SerializedName("is_public") val isPublic: Boolean
+)
+
 data class LoginRequest(val email: String, val password: String)
 
 data class RegisterRequest(
@@ -81,3 +91,43 @@ data class NextSongRequest(
     val shuffle: Boolean
 )
 data class RandomNextRequest(@SerializedName("song_id") val songId: String?)
+
+data class ChatSongDto(
+    val id: String,
+    val title: String,
+    val artist: PublicProfileDto,
+    @SerializedName("cover_image_url") val coverImageUrl: String,
+    @SerializedName("audio_url") val audioUrl: String,
+    val duration: String?
+)
+
+data class ChatMessageDto(
+    val id: String,
+    @SerializedName("conversation_id") val conversationId: String,
+    @SerializedName("client_message_id") val clientMessageId: String,
+    val sender: PublicProfileDto,
+    @SerializedName("message_type") val messageType: String,
+    val body: String,
+    val song: ChatSongDto?,
+    val status: String,
+    @SerializedName("delivered_at") val deliveredAt: String?,
+    @SerializedName("read_at") val readAt: String?,
+    @SerializedName("created_at") val createdAt: String
+)
+
+data class ConversationLastMessageDto(
+    val id: String,
+    @SerializedName("message_type") val messageType: String,
+    val body: String,
+    val status: String,
+    val song: ChatSongDto?,
+    @SerializedName("created_at") val createdAt: String
+)
+
+data class ConversationDto(
+    val id: String,
+    @SerializedName("other_user") val otherUser: PublicProfileDto,
+    @SerializedName("last_message") val lastMessage: ConversationLastMessageDto?,
+    @SerializedName("unread_count") val unreadCount: Int,
+    @SerializedName("updated_at") val updatedAt: String
+)

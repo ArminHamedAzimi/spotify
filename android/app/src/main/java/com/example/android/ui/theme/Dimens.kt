@@ -31,4 +31,16 @@ object AppDimens {
     val screenContentMaxWidth = 560.dp
     val formContentMaxWidth = 480.dp
     val borderWidth = 1.dp
+    val homeHeroHeight = 196.dp
+    val homeHeroWidth = 320.dp
+    val homeSongCardWidth = 152.dp
+    val homeSongCoverSize = 152.dp
+    val homePreviewCardWidth = 176.dp
+    val homePreviewCardHeight = 116.dp
+    val quickActionHeight = 72.dp
+    val miniPlayerHeight = 72.dp
+    val miniPlayerArtworkSize = 52.dp
+    val playerArtworkSize = 280.dp
+    val playerMainControlSize = 64.dp
+    val playerSecondaryControlSize = 48.dp
 }

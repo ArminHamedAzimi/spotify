@@ -66,7 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.lifecycle.viewmodel.compose.viewModel
+import org.koin.androidx.compose.koinViewModel
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.R
@@ -77,7 +77,7 @@ import com.example.android.ui.theme.AppMotion
 private enum class AuthMode { Login, Register }
 
 @Composable
-fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
+fun ProfileScreen(profileViewModel: ProfileViewModel = koinViewModel()) {
     val state by profileViewModel.uiState
     val snackbarHostState = remember { SnackbarHostState() }
     val savedMessage = stringResource(R.string.profile_saved)

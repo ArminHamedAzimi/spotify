@@ -3,8 +3,6 @@ package com.example.android.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import com.chuckerteam.chucker.api.ChuckerInterceptor
-import com.example.android.BuildConfig
 import com.example.android.data.remote.LoginRequest
 import com.example.android.data.remote.RefreshRequest
 import com.example.android.data.remote.RegisterRequest
@@ -15,28 +13,15 @@ import com.example.android.data.remote.UserDto
 import com.example.android.data.session.TokenStore
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Locale
 
-class ProfileRepository(private val context: Context) {
-    private val tokenStore = TokenStore(context)
-    private val httpClient = OkHttpClient.Builder()
-        .addInterceptor(
-            ChuckerInterceptor.Builder(context)
-                .redactHeaders("Authorization")
-                .build()
-        )
-        .build()
-    private val api = Retrofit.Builder()
-        .baseUrl(BuildConfig.API_BASE_URL)
-        .client(httpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(SpotifyApi::class.java)
+class ProfileRepository(
+    private val context: Context,
+    private val tokenStore: TokenStore,
+    private val api: SpotifyApi
+) {
 
     suspend fun restoreUser(): UserDto? {
         if (tokenStore.accessToken == null) return null

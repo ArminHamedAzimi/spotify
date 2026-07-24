@@ -16,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -25,17 +26,22 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.androidx.compose.koinViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.android.ui.components.AppTopBar
+import com.example.android.ui.components.MiniPlayer
 import com.example.android.ui.screens.downloads.DownloadsScreen
 import com.example.android.ui.screens.home.HomeScreen
+import com.example.android.ui.screens.home.HomeEvent
+import com.example.android.ui.screens.home.HomeViewModel
 import com.example.android.ui.screens.notifications.NotificationsScreen
 import com.example.android.ui.screens.playlists.PlaylistsScreen
+import com.example.android.ui.screens.player.PlayerScreen
 import com.example.android.ui.screens.profile.ProfileScreen
 import com.example.android.ui.screens.profile.ProfileViewModel
 import com.example.android.ui.screens.search.SearchScreen
@@ -46,6 +52,7 @@ import com.example.android.ui.localization.AppLanguage
 import com.example.android.data.remote.UserDto
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
+import com.example.android.playback.PlaybackViewModel
 
 @Composable
 fun SpotifyNavGraph(
@@ -55,8 +62,16 @@ fun SpotifyNavGraph(
     onLanguageChange: (AppLanguage) -> Unit
 ) {
     val navController = rememberNavController()
-    val profileViewModel: ProfileViewModel = viewModel()
+    val profileViewModel: ProfileViewModel = koinViewModel()
+    val homeViewModel: HomeViewModel = koinViewModel()
+    val playbackViewModel: PlaybackViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(profileState.user?.id) {
+        if (profileState.user != null) {
+            homeViewModel.onEvent(HomeEvent.Refresh)
+        }
+    }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
     val isMainDestination = bottomNavItems.any { it.route == currentRoute }
@@ -69,6 +84,7 @@ fun SpotifyNavGraph(
                 titleRes = when (currentRoute) {
                     Screen.Notifications.route -> Screen.Notifications.titleRes
                     Screen.Settings.route -> Screen.Settings.titleRes
+                    Screen.Player.route -> Screen.Player.titleRes
                     else -> null
                 },
                 onBackClick = { navController.popBackStack() },
@@ -78,19 +94,28 @@ fun SpotifyNavGraph(
         },
         bottomBar = {
             if (isMainDestination) {
-                MelodifyBottomBar(
-                    currentRoute = currentRoute,
-                    user = profileState.user,
-                    onNavigate = { screen ->
-                        navController.navigate(screen.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                Column {
+                    if (playbackState.hasMedia) {
+                        MiniPlayer(
+                            state = playbackState,
+                            onOpenPlayer = { navController.navigate(Screen.Player.route) },
+                            onTogglePlayPause = playbackViewModel::togglePlayPause
+                        )
                     }
-                )
+                    MelodifyBottomBar(
+                        currentRoute = currentRoute,
+                        user = profileState.user,
+                        onNavigate = { screen ->
+                            navController.navigate(screen.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -99,7 +124,12 @@ fun SpotifyNavGraph(
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Home.route) { HomeScreen() }
+            composable(Screen.Home.route) {
+                HomeScreen(
+                    viewModel = homeViewModel,
+                    onSongClick = playbackViewModel::play
+                )
+            }
             composable(Screen.Search.route) { SearchScreen() }
             composable(Screen.Downloads.route) { DownloadsScreen() }
             composable(Screen.Playlists.route) { PlaylistsScreen() }
@@ -113,6 +143,13 @@ fun SpotifyNavGraph(
                     onThemeModeChange = onThemeModeChange,
                     appLanguage = appLanguage,
                     onLanguageChange = onLanguageChange
+                )
+            }
+            composable(Screen.Player.route) {
+                PlayerScreen(
+                    state = playbackState,
+                    onTogglePlayPause = playbackViewModel::togglePlayPause,
+                    onSeek = playbackViewModel::seekTo
                 )
             }
         }

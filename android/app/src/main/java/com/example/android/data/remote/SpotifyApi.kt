@@ -42,4 +42,9 @@ interface SpotifyApi {
         @Header("Authorization") authorization: String,
         @Body request: SubscriptionRequest
     ): SubscriptionResponse
+
+    @GET("songs/recent/")
+    suspend fun recentSongs(
+        @Header("Authorization") authorization: String
+    ): List<SongDto>
 }

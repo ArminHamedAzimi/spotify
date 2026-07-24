@@ -10,7 +10,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from .models import Playlist, PlaylistFollow, User
+from .models import Playlist, PlaylistFollow, Song, User
 
 
 class PlaylistFollowTests(TestCase):
@@ -104,6 +104,31 @@ class ApiAuthorizationTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_recent_songs_returns_ten_newest_accessible_songs(self):
+        for index in range(12):
+            Song.objects.create(
+                title=f"Song {index}",
+                artist=self.owner,
+                cover_image_url=f"https://media.example.com/cover-{index}.jpg",
+                audio_url=f"https://media.example.com/audio-{index}.mp3",
+                is_published=True,
+            )
+        Song.objects.create(
+            title="Other Artist Draft",
+            artist=self.other,
+            cover_image_url="https://media.example.com/draft.jpg",
+            audio_url="https://media.example.com/draft.mp3",
+            is_published=False,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get("/api/songs/recent/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 10)
+        self.assertEqual(response.data[0]["title"], "Song 11")
+        self.assertEqual(response.data[-1]["title"], "Song 2")
 
     def test_authenticated_user_can_follow_public_playlist(self):
         self.api_client.force_authenticate(user=self.other)

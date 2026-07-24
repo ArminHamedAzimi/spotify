@@ -219,3 +219,6 @@ __marimo__/
 
 # static files
 backend/staticfiles/
+
+# songs file
+songs/

@@ -131,4 +131,10 @@
     <string name="send_message">Send message</string>
     <string name="share_current_song">Share current song</string>
     <string name="message_status">Message status</string>
+    <string name="stop_playback">Stop playback</string>
+    <string name="playback_channel_name">Music playback</string>
+    <string name="home_like_count">%1$d likes</string>
+    <string name="home_follower_count">%1$d followers</string>
+    <string name="artist_avatar">%1$s’s avatar</string>
+    <string name="home_no_recently_played">Songs you play will appear here</string>
 </resources>

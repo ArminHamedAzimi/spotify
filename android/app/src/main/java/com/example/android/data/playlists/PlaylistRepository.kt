@@ -46,12 +46,34 @@ class PlaylistRepository(
     suspend fun playlist(playlistId: String) = authenticated {
         api.playlist(it, playlistId)
     }
+
+    suspend fun likedPlaylistId(): String? = authenticated { auth ->
+        var page = 1
+        do {
+            val response = api.myPlaylists(auth, page, MAX_PAGE_SIZE)
+            response.results.firstOrNull(PlaylistDto::isLiked)?.let { return@authenticated it.id }
+            page++
+        } while (response.next != null)
+        null
+    }
     suspend fun create(title: String) = authenticated {
         api.createPlaylist(it, CreatePlaylistRequest(title.trim()))
     }
     suspend fun addSong(playlistId: String, songId: String) = authenticated {
         api.addSongToPlaylist(it, playlistId, PlaylistSongRequest(songId))
     }
+
+    suspend fun playlistContainsSong(playlistId: String, songId: String): Boolean =
+        authenticated { auth ->
+            var page = 1
+            do {
+                val response = api.playlistSongs(auth, playlistId, page, MAX_PAGE_SIZE)
+                if (response.results.any { it.id == songId }) return@authenticated true
+                page++
+            } while (response.next != null)
+            false
+        }
+
     suspend fun removeSong(playlistId: String, songId: String) = authenticated {
         api.removeSongFromPlaylist(it, playlistId, songId)
     }
@@ -94,6 +116,7 @@ class PlaylistRepository(
     private companion object {
         const val PAGE_SIZE = 10
         const val PREFETCH_DISTANCE = 3
+        const val MAX_PAGE_SIZE = 100
     }
 }
 

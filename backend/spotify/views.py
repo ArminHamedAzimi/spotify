@@ -51,8 +51,10 @@ from .serializers import (
     PlaylistSerializer,
     PlaylistNextSongSerializer,
     PlaylistVisibilitySerializer,
+    PopularSongSerializer,
     PublicUserProfileSerializer,
     RandomNextSongSerializer,
+    TopArtistSerializer,
     SongSerializer,
     SongSearchQuerySerializer,
     SubscriptionResponseSerializer,
@@ -97,6 +99,7 @@ class UserViewSet(viewsets.ModelViewSet):
             "followers",
             "following",
             "playlists",
+            "top_artists",
         }:
             return [IsAuthenticated()]
         return super().get_permissions()
@@ -206,6 +209,25 @@ class UserViewSet(viewsets.ModelViewSet):
             )
         return Response(PlaylistSerializer(playlists, many=True).data)
 
+    @extend_schema(responses={200: TopArtistSerializer(many=True)})
+    @action(detail=False, methods=("get",), url_path="top-artists")
+    def top_artists(self, request):
+        artists = (
+            User.objects.filter(is_active=True, songs__is_published=True)
+            .annotate(
+                follower_count=Count(
+                    "follower_relationships",
+                    distinct=True,
+                )
+            )
+            .order_by("-follower_count", "name", "pk")
+            .distinct()[:10]
+        )
+        return Response(
+            TopArtistSerializer(artists, many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
     @extend_schema(
         request=AvatarUploadSerializer,
         responses={200: AvatarUploadResponseSerializer},
@@ -308,6 +330,26 @@ class SongViewSet(viewsets.ModelViewSet):
         songs = self.get_queryset().order_by("-created_at", "pk")[:10]
         return Response(
             self.get_serializer(songs, many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @extend_schema(responses={200: PopularSongSerializer(many=True)})
+    @action(detail=False, methods=("get",), url_path="popular")
+    def popular(self, request):
+        songs = (
+            Song.objects.filter(is_published=True)
+            .select_related("artist")
+            .annotate(
+                like_count=Count(
+                    "playlist_entries",
+                    filter=Q(playlist_entries__playlist__is_liked=True),
+                )
+            )
+            .filter(like_count__gt=0)
+            .order_by("-like_count", "-created_at", "pk")[:10]
+        )
+        return Response(
+            PopularSongSerializer(songs, many=True).data,
             status=status.HTTP_200_OK,
         )
 

@@ -380,7 +380,54 @@ ordering and the standard pagination envelope. Each result includes
 `song_count`, so Android does not need to download the songs page merely to
 show its size.
 
-### 4.8 Get one user by UUID
+### 4.8 Get the top-followed artists
+
+```http
+GET /api/users/top-artists/
+Authorization: Bearer {access_token}
+```
+
+Returns a JSON array containing at most 10 active artists, ordered by follower
+count descending. In this API, an artist is an active user who owns at least
+one published song. Each result includes one published song—the artist's
+newest published song—so the client can immediately show or play an example.
+
+There is no request body and this endpoint is not paginated because its result
+is strictly limited to 10 items.
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "artist": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Aurora",
+      "avatar_url": "https://media.example.com/avatars/aurora.jpg",
+      "has_active_premium": true
+    },
+    "follower_count": 2450,
+    "song": {
+      "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+      "title": "Northern Lights",
+      "artist": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Aurora",
+        "avatar_url": "https://media.example.com/avatars/aurora.jpg",
+        "has_active_premium": true
+      },
+      "cover_image_url": "https://media.example.com/covers/northern-lights.jpg",
+      "audio_url": "https://media.example.com/audio/northern-lights.mp3",
+      "duration": "00:03:42"
+    }
+  }
+]
+```
+
+Artists with equal follower counts are ordered by name and then UUID. Missing
+or invalid JWT authentication returns `401 Unauthorized`.
+
+### 4.9 Get one user by UUID
 
 ```http
 GET /api/users/{id}/
@@ -391,7 +438,7 @@ staff/admin users can retrieve any user.
 
 Response — `200 OK`: one user object in the same format shown above.
 
-### 4.9 Replace a user
+### 4.10 Replace a user
 
 ```http
 PUT /api/users/{id}/
@@ -411,7 +458,7 @@ Request:
 The password may be omitted to keep the existing password. It is write-only.
 Response — `200 OK`: the updated user without the password.
 
-### 4.10 Partially update a user
+### 4.11 Partially update a user
 
 ```http
 PATCH /api/users/{id}/
@@ -435,7 +482,7 @@ To change the password:
 
 Response — `200 OK`: the updated user object.
 
-### 4.11 Delete a user
+### 4.12 Delete a user
 
 ```http
 DELETE /api/users/{id}/
@@ -444,7 +491,7 @@ DELETE /api/users/{id}/
 There is no request or response JSON body. Success returns `204 No Content`.
 Deleting a user also deletes playlists and follow records owned by that user.
 
-### 4.12 Upload or replace the current user's avatar
+### 4.13 Upload or replace the current user's avatar
 
 ```http
 POST /api/users/avatar/
@@ -543,7 +590,7 @@ Example validation error — `400 Bad Request`:
 An unsupported or invalid image also returns `400`. Missing or invalid JWT
 authentication returns `401 Unauthorized`.
 
-### 4.13 Add or extend a subscription
+### 4.14 Add or extend a subscription
 
 ```http
 POST /api/users/subscription/
@@ -771,7 +818,47 @@ If no accessible songs exist, the response is an empty array:
 
 Missing or invalid JWT authentication returns `401 Unauthorized`.
 
-### 5.4 Create a song
+### 5.4 Get the 10 most popular songs
+
+```http
+GET /api/songs/popular/
+Authorization: Bearer {access_token}
+```
+
+Returns at most 10 published songs ordered by `like_count` descending. A like
+means that the song is present in a user's unique Liked Songs playlist
+(`is_liked: true`). A user can therefore contribute at most one like to a song
+because duplicate songs are prohibited inside a playlist.
+
+Only songs with at least one like are returned. Ties are resolved by newest
+song first and then UUID. There is no request body and the response is not
+paginated because it is strictly limited to 10 items.
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+    "title": "Northern Lights",
+    "artist": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Aurora",
+      "avatar_url": "https://media.example.com/avatars/aurora.jpg",
+      "has_active_premium": true
+    },
+    "cover_image_url": "https://media.example.com/covers/northern-lights.jpg",
+    "audio_url": "https://media.example.com/audio/northern-lights.mp3",
+    "duration": "00:03:42",
+    "like_count": 817
+  }
+]
+```
+
+If no published song has been liked, the response is `[]`. Missing or invalid
+JWT authentication returns `401 Unauthorized`.
+
+### 5.5 Create a song
 
 ```http
 POST /api/songs/
@@ -791,7 +878,7 @@ Request:
 
 Response — `201 Created`: the complete song object.
 
-### 5.5 Get one song
+### 5.6 Get one song
 
 ```http
 GET /api/songs/{id}/
@@ -799,7 +886,7 @@ GET /api/songs/{id}/
 
 `{id}` is the song UUID. Response — `200 OK`: one complete song object.
 
-### 5.6 Replace a song
+### 5.7 Replace a song
 
 ```http
 PUT /api/songs/{id}/
@@ -819,7 +906,7 @@ Request uses the same writable fields as song creation:
 
 Response — `200 OK`: the updated song.
 
-### 5.7 Partially update a song
+### 5.8 Partially update a song
 
 ```http
 PATCH /api/songs/{id}/
@@ -835,7 +922,7 @@ Example:
 
 Response — `200 OK`: the updated song.
 
-### 5.8 Delete a song
+### 5.9 Delete a song
 
 ```http
 DELETE /api/songs/{id}/
@@ -843,7 +930,7 @@ DELETE /api/songs/{id}/
 
 No JSON body. Success returns `204 No Content`.
 
-### 5.9 Get a random next song outside a playlist
+### 5.10 Get a random next song outside a playlist
 
 ```http
 POST /api/songs/random-next/

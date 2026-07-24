@@ -109,6 +109,8 @@ fun PlayerScreen(
     onSleepTimerChange: (Int?) -> Unit,
     playlists: LazyPagingItems<PlaylistDto>,
     addedMemberships: Set<Pair<String, String>>,
+    loadedMemberships: Set<Pair<String, String>>,
+    onLoadMemberships: (String, Collection<String>) -> Unit,
     onAddToPlaylist: (String, String) -> Unit,
     onCreatePlaylist: (String, () -> Unit) -> Unit,
     onNext: () -> Unit,
@@ -170,6 +172,10 @@ fun PlayerScreen(
     var creatingPlaylist by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
     if (showPlaylists) {
+        val loadedPlaylistIds = playlists.itemSnapshotList.items.map(PlaylistDto::id)
+        LaunchedEffect(state.mediaId, loadedPlaylistIds) {
+            state.mediaId?.let { onLoadMemberships(it, loadedPlaylistIds) }
+        }
         ModalBottomSheet(onDismissRequest = { showPlaylists = false }) {
             Column(
                 modifier = Modifier
@@ -179,12 +185,13 @@ fun PlayerScreen(
             ) {
                 repeat(playlists.itemCount) { index ->
                     val playlist = playlists[index] ?: return@repeat
-                    val containsSong =
-                        state.mediaId?.let { playlist.id to it } in addedMemberships
+                    val membership = state.mediaId?.let { playlist.id to it }
+                    val containsSong = membership in addedMemberships
+                    val membershipLoaded = membership in loadedMemberships
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !containsSong) {
+                            .clickable(enabled = membershipLoaded && !containsSong) {
                                 state.mediaId?.let { onAddToPlaylist(playlist.id, it) }
                             },
                         shape = MaterialTheme.shapes.medium,
@@ -217,7 +224,12 @@ fun PlayerScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleLarge
                             )
-                            if (containsSong) {
+                            if (!membershipLoaded) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(AppDimens.actionIconSize),
+                                    strokeWidth = AppDimens.borderWidth
+                                )
+                            } else if (containsSong) {
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primary

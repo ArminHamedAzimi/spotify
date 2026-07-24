@@ -36,6 +36,11 @@ sealed class Screen(
     }
     data object Conversations : Screen("conversations", R.string.messages, Icons.Filled.Chat)
     data object Chat : Screen("chat", R.string.message, Icons.Filled.Chat)
+    data object RecentlyPlayed : Screen(
+        "recently-played",
+        R.string.home_recently_played,
+        Icons.Filled.LibraryMusic
+    )
 }
 
 val bottomNavItems = listOf(

@@ -14,6 +14,14 @@ object PlaybackCommandBus {
     fun requestNext() {
         _commands.tryEmit(PlaybackCommand.Next)
     }
+
+    fun requestPrevious() {
+        _commands.tryEmit(PlaybackCommand.Previous)
+    }
+
+    fun requestStop() {
+        _commands.tryEmit(PlaybackCommand.Stop)
+    }
 }
 
-enum class PlaybackCommand { Next }
+enum class PlaybackCommand { Previous, Next, Stop }

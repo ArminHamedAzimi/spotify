@@ -33,6 +33,11 @@ interface SpotifyApi {
         @Query("page_size") pageSize: Int
     ): PaginatedResponse<PublicProfileDto>
 
+    @GET("users/top-artists/")
+    suspend fun topArtists(
+        @Header("Authorization") authorization: String
+    ): List<TopArtistDto>
+
     @POST("users/{id}/follow/")
     suspend fun followUser(
         @Header("Authorization") authorization: String,
@@ -101,6 +106,11 @@ interface SpotifyApi {
         @Query("page") page: Int,
         @Query("page_size") pageSize: Int
     ): PaginatedResponse<SongDto>
+
+    @GET("songs/popular/")
+    suspend fun popularSongs(
+        @Header("Authorization") authorization: String
+    ): List<PopularSongDto>
 
     @GET("playlists/me/")
     suspend fun myPlaylists(

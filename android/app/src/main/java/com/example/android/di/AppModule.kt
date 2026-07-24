@@ -69,7 +69,7 @@ val appModule = module {
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
-    viewModel { HomeViewModel(get()) }
+    viewModel { HomeViewModel(get<HomeRepository>()) }
     viewModel { PlaybackViewModel(androidContext() as android.app.Application, get(), get()) }
     viewModel { DownloadsViewModel(get()) }
     viewModel { PlaylistsViewModel(get()) }

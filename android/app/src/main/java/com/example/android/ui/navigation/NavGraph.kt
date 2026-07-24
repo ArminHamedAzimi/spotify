@@ -46,6 +46,7 @@ import com.example.android.ui.screens.downloads.DownloadsViewModel
 import com.example.android.ui.screens.home.HomeScreen
 import com.example.android.ui.screens.home.HomeEvent
 import com.example.android.ui.screens.home.HomeViewModel
+import com.example.android.ui.screens.home.RecentlyPlayedScreen
 import com.example.android.ui.screens.notifications.NotificationsScreen
 import com.example.android.ui.screens.playlists.PlaylistsScreen
 import com.example.android.ui.screens.playlists.PlaylistDetailScreen
@@ -91,6 +92,7 @@ fun SpotifyNavGraph(
     val chatViewModel: ChatViewModel = koinViewModel()
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val recentlyPlayed by playbackViewModel.recentlyPlayed.collectAsStateWithLifecycle()
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
     val pagedDownloads = downloadsViewModel.pagedSongs.collectAsLazyPagingItems()
     val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
@@ -124,15 +126,17 @@ fun SpotifyNavGraph(
         currentRoute == Screen.Connections.route
     val isChatDestination = currentRoute == Screen.Conversations.route ||
         currentRoute == Screen.Chat.route
+    val isRecentlyPlayed = currentRoute == Screen.RecentlyPlayed.route
     val showAppBottomBar =
-        isMainDestination || isPlaylistDetail || isSocialDestination || isChatDestination
+        isMainDestination || isPlaylistDetail || isSocialDestination ||
+            isChatDestination || isRecentlyPlayed
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (
                 currentRoute != Screen.Player.route && !isPlaylistDetail &&
-                !isSocialDestination && !isChatDestination
+                !isSocialDestination && !isChatDestination && !isRecentlyPlayed
             ) {
                 AppTopBar(
                     isMainDestination = isMainDestination,
@@ -171,6 +175,7 @@ fun SpotifyNavGraph(
                             isPlaylistDetail -> Screen.Playlists.route
                             isSocialDestination -> Screen.Search.route
                             isChatDestination -> Screen.Search.route
+                            isRecentlyPlayed -> Screen.Home.route
                             else -> currentRoute
                         },
                         user = profileState.user,
@@ -196,6 +201,28 @@ fun SpotifyNavGraph(
             composable(Screen.Home.route) {
                 HomeScreen(
                     viewModel = homeViewModel,
+                    onSongClick = playbackViewModel::play,
+                    onLikedSongsClick = {
+                        playlistsViewModel.openLikedPlaylist {
+                            navController.navigate(Screen.PlaylistDetail.route(it))
+                        }
+                    },
+                    onRecentlyPlayedClick = {
+                        navController.navigate(Screen.RecentlyPlayed.route)
+                    },
+                    onMyPlaylistsClick = {
+                        navController.navigate(Screen.Playlists.route)
+                    },
+                    onArtistClick = {
+                        socialViewModel.openProfile(it)
+                        navController.navigate(Screen.PublicProfile.route)
+                    }
+                )
+            }
+            composable(Screen.RecentlyPlayed.route) {
+                RecentlyPlayedScreen(
+                    songs = recentlyPlayed,
+                    onBack = { navController.popBackStack() },
                     onSongClick = playbackViewModel::play
                 )
             }
@@ -361,6 +388,8 @@ fun SpotifyNavGraph(
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
                     playlists = pagedPlaylists,
                     addedMemberships = playlistsState.addedMemberships,
+                    loadedMemberships = playlistsState.loadedMemberships,
+                    onLoadMemberships = playlistsViewModel::loadMemberships,
                     onAddToPlaylist = playlistsViewModel::addSong,
                     onCreatePlaylist = playlistsViewModel::create,
                     onNext = playbackViewModel::next,

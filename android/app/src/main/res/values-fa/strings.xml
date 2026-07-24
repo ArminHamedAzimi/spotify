@@ -131,4 +131,10 @@
     <string name="send_message">ارسال پیام</string>
     <string name="share_current_song">اشتراک‌گذاری آهنگ در حال پخش</string>
     <string name="message_status">وضعیت پیام</string>
+    <string name="stop_playback">توقف پخش</string>
+    <string name="playback_channel_name">پخش موسیقی</string>
+    <string name="home_like_count">%1$d پسند</string>
+    <string name="home_follower_count">%1$d دنبال‌کننده</string>
+    <string name="artist_avatar">تصویر نمایهٔ %1$s</string>
+    <string name="home_no_recently_played">آهنگ‌هایی که پخش می‌کنید اینجا نمایش داده می‌شوند</string>
 </resources>

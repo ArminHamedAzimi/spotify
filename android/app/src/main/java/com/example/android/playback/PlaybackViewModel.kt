@@ -61,6 +61,8 @@ class PlaybackViewModel(
     private var activeUserId: String? = null
     private var currentSong: Song? = null
     private val history = ArrayDeque<Song>()
+    private val _recentlyPlayed = MutableStateFlow<List<Song>>(emptyList())
+    val recentlyPlayed: StateFlow<List<Song>> = _recentlyPlayed.asStateFlow()
     private var source: PlaybackSource = PlaybackSource.General()
     private var advancing = false
 
@@ -78,7 +80,9 @@ class PlaybackViewModel(
         viewModelScope.launch {
             PlaybackCommandBus.commands.collect { command ->
                 when (command) {
+                    PlaybackCommand.Previous -> previous()
                     PlaybackCommand.Next -> next()
+                    PlaybackCommand.Stop -> resetStoppedPlayback()
                 }
             }
         }
@@ -122,6 +126,10 @@ class PlaybackViewModel(
 
     private fun selectSong(song: Song, newSource: PlaybackSource, recordHistory: Boolean = true) {
         if (recordHistory) currentSong?.let(history::addLast)
+        _recentlyPlayed.update { songs ->
+            (listOf(song) + songs.filterNot { it.id == song.id })
+                .take(RECENTLY_PLAYED_LIMIT)
+        }
         currentSong = song
         source = newSource
         _uiState.update {
@@ -200,6 +208,13 @@ class PlaybackViewModel(
     fun previous() {
         val previous = history.removeLastOrNull() ?: return
         selectSong(previous, source, recordHistory = false)
+    }
+
+    private fun resetStoppedPlayback() {
+        currentSong = null
+        history.clear()
+        controller?.stop()
+        controller?.clearMediaItems()
     }
 
     fun setShuffle(enabled: Boolean) {
@@ -336,6 +351,7 @@ class PlaybackViewModel(
 }
 
 private const val PLAYBACK_LOG_TAG = "PlaybackViewModel"
+private const val RECENTLY_PLAYED_LIMIT = 50
 
 private sealed interface PlaybackSource {
     val shuffle: Boolean

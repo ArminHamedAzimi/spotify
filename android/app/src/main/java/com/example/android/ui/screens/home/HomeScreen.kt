@@ -26,7 +26,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PersonSearch
-import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,23 +59,33 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.example.android.R
 import com.example.android.domain.home.Song
+import com.example.android.domain.home.PopularSong
+import com.example.android.domain.home.TopArtist
+import com.example.android.data.remote.PublicProfileDto
 import com.example.android.ui.theme.AppDimens
 import com.example.android.ui.theme.PlayerVisuals
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = koinViewModel(),
-    onSongClick: (Song) -> Unit = {}
+    onSongClick: (Song) -> Unit = {},
+    onLikedSongsClick: () -> Unit = {},
+    onRecentlyPlayedClick: () -> Unit = {},
+    onMyPlaylistsClick: () -> Unit = {},
+    onArtistClick: (PublicProfileDto) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(vertical = AppDimens.spaceMedium),
         verticalArrangement = Arrangement.spacedBy(AppDimens.spaceLarge)
     ) {
@@ -93,23 +104,24 @@ fun HomeScreen(
             )
         }
         FeaturedCarousel(state.recentSongs, onSongClick)
-        QuickActions()
+        QuickActions(
+            onLikedSongsClick = onLikedSongsClick,
+            onRecentlyPlayedClick = onRecentlyPlayedClick,
+            onMyPlaylistsClick = onMyPlaylistsClick,
+            onTopArtistsClick = {
+                scope.launch { scrollState.animateScrollTo(scrollState.maxValue) }
+            }
+        )
         RecentSongsSection(
             state = state,
             onSongClick = onSongClick,
             onRetry = { viewModel.onEvent(HomeEvent.Refresh) }
         )
-        PreviewSection(
-            titleRes = R.string.home_popular,
-            icon = Icons.AutoMirrored.Rounded.TrendingUp
-        )
-        PreviewSection(
-            titleRes = R.string.home_global_playlists,
-            icon = Icons.Rounded.Public
-        )
-        PreviewSection(
-            titleRes = R.string.home_local_playlists,
-            icon = Icons.Rounded.LibraryMusic
+        PopularSongsSection(state.popularSongs, onSongClick)
+        TopArtistsSection(
+            artists = state.topArtists,
+            onArtistClick = onArtistClick,
+            onSongClick = onSongClick
         )
     }
 }
@@ -246,7 +258,12 @@ private fun FeaturedPlaceholder() {
 }
 
 @Composable
-private fun QuickActions() {
+private fun QuickActions(
+    onLikedSongsClick: () -> Unit,
+    onRecentlyPlayedClick: () -> Unit,
+    onMyPlaylistsClick: () -> Unit,
+    onTopArtistsClick: () -> Unit
+) {
     Column(
         modifier = Modifier.padding(horizontal = AppDimens.spaceLarge),
         verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
@@ -259,12 +276,14 @@ private fun QuickActions() {
             QuickAction(
                 R.string.home_liked_songs,
                 Icons.Rounded.Favorite,
-                Modifier.weight(1f)
+                Modifier.weight(1f),
+                onLikedSongsClick
             )
             QuickAction(
                 R.string.home_recently_played,
                 Icons.Rounded.History,
-                Modifier.weight(1f)
+                Modifier.weight(1f),
+                onRecentlyPlayedClick
             )
         }
         Row(
@@ -274,12 +293,14 @@ private fun QuickActions() {
             QuickAction(
                 R.string.home_my_playlists,
                 Icons.Rounded.LibraryMusic,
-                Modifier.weight(1f)
+                Modifier.weight(1f),
+                onMyPlaylistsClick
             )
             QuickAction(
                 R.string.home_top_artists,
                 Icons.Rounded.PersonSearch,
-                Modifier.weight(1f)
+                Modifier.weight(1f),
+                onTopArtistsClick
             )
         }
     }
@@ -289,9 +310,11 @@ private fun QuickActions() {
 private fun QuickAction(
     @StringRes titleRes: Int,
     icon: ImageVector,
-    modifier: Modifier
+    modifier: Modifier,
+    onClick: () -> Unit
 ) {
     Card(
+        onClick = onClick,
         modifier = modifier.height(AppDimens.quickActionHeight),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
@@ -423,10 +446,13 @@ private fun SongArtwork(song: Song, modifier: Modifier) {
 }
 
 @Composable
-private fun PreviewSection(@StringRes titleRes: Int, icon: ImageVector) {
+private fun PopularSongsSection(
+    songs: List<PopularSong>,
+    onSongClick: (Song) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)) {
         SectionTitle(
-            titleRes = titleRes,
+            titleRes = R.string.home_popular,
             modifier = Modifier.padding(horizontal = AppDimens.spaceLarge)
         )
         LazyRow(
@@ -435,27 +461,96 @@ private fun PreviewSection(@StringRes titleRes: Int, icon: ImageVector) {
                 horizontal = AppDimens.spaceLarge
             )
         ) {
-            items(PREVIEW_CARD_COUNT) {
-                Card(
-                    modifier = Modifier
-                        .width(AppDimens.homePreviewCardWidth)
-                        .height(AppDimens.homePreviewCardHeight),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+            items(songs, key = { it.song.id }) { popular ->
+                Column(
+                    modifier = Modifier.width(AppDimens.homeSongCardWidth),
+                    verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
+                ) {
+                    Card(
+                        onClick = { onSongClick(popular.song) },
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        SongArtwork(popular.song, Modifier.size(AppDimens.homeSongCoverSize))
+                    }
+                    Text(popular.song.title, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        stringResource(R.string.home_like_count, popular.likeCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopArtistsSection(
+    artists: List<TopArtist>,
+    onArtistClick: (PublicProfileDto) -> Unit,
+    onSongClick: (Song) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)) {
+        SectionTitle(
+            titleRes = R.string.home_top_artists,
+            modifier = Modifier.padding(horizontal = AppDimens.spaceLarge)
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = AppDimens.spaceLarge
+            )
+        ) {
+            items(artists, key = { it.profile.id }) { artist ->
+                Card(
+                    onClick = { onArtistClick(artist.profile) },
+                    modifier = Modifier.width(AppDimens.homePreviewCardWidth),
+                    shape = MaterialTheme.shapes.large
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(AppDimens.spaceMedium),
-                        verticalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.padding(AppDimens.spaceMedium),
+                        verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        SubcomposeAsyncImage(
+                            model = artist.profile.avatarUrl,
+                            contentDescription = stringResource(
+                                R.string.artist_avatar,
+                                artist.profile.name
+                            ),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(AppDimens.emptyStateIconSize)
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.shapes.extraLarge
+                                )
+                        ) {
+                            if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
+                                SubcomposeAsyncImageContent()
+                            } else {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Rounded.PersonSearch, contentDescription = null)
+                                }
+                            }
+                        }
                         Text(
-                            text = stringResource(R.string.home_coming_soon),
-                            style = MaterialTheme.typography.labelLarge
+                            artist.profile.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = ARTIST_MAX_LINES
                         )
+                        Text(
+                            stringResource(
+                                R.string.home_follower_count,
+                                artist.followerCount
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(onClick = { onSongClick(artist.sampleSong) }) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                            Text(stringResource(R.string.play))
+                        }
                     }
                 }
             }
@@ -476,6 +571,5 @@ private fun SectionTitle(
 }
 
 private const val FEATURED_SONG_COUNT = 3
-private const val PREVIEW_CARD_COUNT = 3
 private const val TITLE_MAX_LINES = 2
 private const val ARTIST_MAX_LINES = 1

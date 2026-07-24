@@ -143,6 +143,35 @@ class SharedSongSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PopularSongSerializer(SharedSongSerializer):
+    like_count = serializers.IntegerField(read_only=True)
+
+    class Meta(SharedSongSerializer.Meta):
+        fields = (*SharedSongSerializer.Meta.fields, "like_count")
+        read_only_fields = fields
+
+
+class TopArtistSerializer(serializers.ModelSerializer):
+    artist = PublicUserProfileSerializer(source="*", read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    song = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("artist", "follower_count", "song")
+        read_only_fields = fields
+
+    @extend_schema_field(SharedSongSerializer)
+    def get_song(self, obj):
+        song = (
+            obj.songs.filter(is_published=True)
+            .select_related("artist")
+            .order_by("-created_at", "pk")
+            .first()
+        )
+        return SharedSongSerializer(song).data if song else None
+
+
 class DirectMessageSerializer(serializers.ModelSerializer):
     sender = PublicUserProfileSerializer(read_only=True)
     song = SharedSongSerializer(read_only=True)

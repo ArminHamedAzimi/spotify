@@ -18,7 +18,8 @@ data class PlaylistsUiState(
     val selected: PlaylistDto? = null,
     val isLoading: Boolean = false,
     val error: Boolean = false,
-    val addedMemberships: Set<Pair<String, String>> = emptySet()
+    val addedMemberships: Set<Pair<String, String>> = emptySet(),
+    val loadedMemberships: Set<Pair<String, String>> = emptySet()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -26,6 +27,7 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
     private val _state = MutableStateFlow(PlaylistsUiState())
     val state = _state.asStateFlow()
     private val selectedPlaylistId = MutableStateFlow<String?>(null)
+    private val loadingMemberships = mutableSetOf<Pair<String, String>>()
 
     val playlists = repository.pagedPlaylists().cachedIn(viewModelScope)
     val songs = selectedPlaylistId
@@ -55,10 +57,42 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
         }
     }
 
+    fun loadMemberships(songId: String, playlistIds: Collection<String>) {
+        playlistIds.forEach { playlistId ->
+            val membership = playlistId to songId
+            if (membership in _state.value.loadedMemberships ||
+                !loadingMemberships.add(membership)
+            ) {
+                return@forEach
+            }
+            viewModelScope.launch {
+                runCatching {
+                    repository.playlistContainsSong(playlistId, songId)
+                }.onSuccess { containsSong ->
+                    _state.update { current ->
+                        current.copy(
+                            addedMemberships = if (containsSong) {
+                                current.addedMemberships + membership
+                            } else {
+                                current.addedMemberships - membership
+                            },
+                            loadedMemberships = current.loadedMemberships + membership
+                        )
+                    }
+                }
+                loadingMemberships.remove(membership)
+            }
+        }
+    }
+
     fun addSong(playlistId: String, songId: String) = viewModelScope.launch {
         runCatching { repository.addSong(playlistId, songId) }.onSuccess {
             _state.update {
-                it.copy(addedMemberships = it.addedMemberships + (playlistId to songId))
+                val membership = playlistId to songId
+                it.copy(
+                    addedMemberships = it.addedMemberships + membership,
+                    loadedMemberships = it.loadedMemberships + membership
+                )
             }
             repository.invalidatePlaylists()
             repository.invalidateSongs()
@@ -69,7 +103,11 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
         runCatching { repository.removeSong(playlistId, songId) }.fold(
             {
                 _state.update {
-                    it.copy(addedMemberships = it.addedMemberships - (playlistId to songId))
+                    val membership = playlistId to songId
+                    it.copy(
+                        addedMemberships = it.addedMemberships - membership,
+                        loadedMemberships = it.loadedMemberships + membership
+                    )
                 }
                 repository.invalidatePlaylists()
                 repository.invalidateSongs()
@@ -83,5 +121,9 @@ class PlaylistsViewModel(private val repository: PlaylistRepository) : ViewModel
             _state.update { it.copy(selected = playlist) }
             repository.invalidatePlaylists()
         }
+    }
+
+    fun openLikedPlaylist(onFound: (String) -> Unit) = viewModelScope.launch {
+        repository.likedPlaylistId()?.let(onFound)
     }
 }

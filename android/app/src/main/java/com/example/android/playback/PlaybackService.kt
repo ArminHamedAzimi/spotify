@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.CommandButton
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
@@ -33,6 +34,16 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .setNotificationId(PLAYBACK_NOTIFICATION_ID)
+            .setChannelId(PLAYBACK_CHANNEL_ID)
+            .setChannelName(R.string.playback_channel_name)
+            .build()
+        notificationProvider.setSmallIcon(R.drawable.ic_notification_music)
+        setMediaNotificationProvider(notificationProvider)
+        setShowNotificationForIdlePlayer(
+            SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER
+        )
         val playbackCache = SimpleCache(
             cacheDir.resolve(CACHE_DIRECTORY),
             LeastRecentlyUsedCacheEvictor(PlaybackConfig.cacheSizeBytes),
@@ -85,14 +96,34 @@ class PlaybackService : MediaSessionService() {
         const val CACHE_DIRECTORY = "media"
         const val SESSION_ACTIVITY_REQUEST_CODE = 100
         const val COMMAND_NEXT = "com.example.android.playback.NEXT"
+        const val COMMAND_PREVIOUS = "com.example.android.playback.PREVIOUS"
+        const val COMMAND_STOP = "com.example.android.playback.STOP"
+        const val PLAYBACK_NOTIFICATION_ID = 2001
+        const val PLAYBACK_CHANNEL_ID = "media_playback"
     }
 
     private val nextCommand = SessionCommand(COMMAND_NEXT, Bundle.EMPTY)
+    private val previousCommand = SessionCommand(COMMAND_PREVIOUS, Bundle.EMPTY)
+    private val stopCommand = SessionCommand(COMMAND_STOP, Bundle.EMPTY)
     private val nextButton by lazy {
         CommandButton.Builder(CommandButton.ICON_NEXT)
             .setSessionCommand(nextCommand)
             .setDisplayName(getString(R.string.next_song))
             .setSlots(CommandButton.SLOT_FORWARD)
+            .build()
+    }
+    private val previousButton by lazy {
+        CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+            .setSessionCommand(previousCommand)
+            .setDisplayName(getString(R.string.previous_song))
+            .setSlots(CommandButton.SLOT_BACK)
+            .build()
+    }
+    private val stopButton by lazy {
+        CommandButton.Builder(CommandButton.ICON_STOP)
+            .setSessionCommand(stopCommand)
+            .setDisplayName(getString(R.string.stop_playback))
+            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY)
             .build()
     }
     private val sessionCallback = object : MediaSession.Callback {
@@ -102,14 +133,18 @@ class PlaybackService : MediaSessionService() {
         ): MediaSession.ConnectionResult {
             val sessionCommands =
                 MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(previousCommand)
                 .add(nextCommand)
+                .add(stopCommand)
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
                 .setAvailablePlayerCommands(
                     MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
                 )
-                .setMediaButtonPreferences(listOf(nextButton))
+                .setMediaButtonPreferences(
+                    listOf(previousButton, nextButton, stopButton)
+                )
                 .build()
         }
 
@@ -119,14 +154,20 @@ class PlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction == COMMAND_NEXT) {
-                PlaybackCommandBus.requestNext()
-                return Futures.immediateFuture(
-                    SessionResult(SessionResult.RESULT_SUCCESS)
+            when (customCommand.customAction) {
+                COMMAND_PREVIOUS -> PlaybackCommandBus.requestPrevious()
+                COMMAND_NEXT -> PlaybackCommandBus.requestNext()
+                COMMAND_STOP -> {
+                    session.player.stop()
+                    session.player.clearMediaItems()
+                    PlaybackCommandBus.requestStop()
+                }
+                else -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED)
                 )
             }
             return Futures.immediateFuture(
-                SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED)
+                SessionResult(SessionResult.RESULT_SUCCESS)
             )
         }
     }

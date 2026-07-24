@@ -131,3 +131,28 @@ data class ConversationDto(
     @SerializedName("unread_count") val unreadCount: Int,
     @SerializedName("updated_at") val updatedAt: String
 )
+
+data class HomeSongDto(
+    val id: String,
+    val title: String,
+    val artist: PublicProfileDto,
+    @SerializedName("cover_image_url") val coverImageUrl: String,
+    @SerializedName("audio_url") val audioUrl: String,
+    val duration: String?
+)
+
+data class PopularSongDto(
+    val id: String,
+    val title: String,
+    val artist: PublicProfileDto,
+    @SerializedName("cover_image_url") val coverImageUrl: String,
+    @SerializedName("audio_url") val audioUrl: String,
+    val duration: String?,
+    @SerializedName("like_count") val likeCount: Int
+)
+
+data class TopArtistDto(
+    val artist: PublicProfileDto,
+    @SerializedName("follower_count") val followerCount: Int,
+    val song: HomeSongDto
+)

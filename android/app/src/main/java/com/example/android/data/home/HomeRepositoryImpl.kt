@@ -6,6 +6,8 @@ import com.example.android.data.remote.SpotifyApi
 import com.example.android.data.session.TokenStore
 import com.example.android.domain.home.HomeRepository
 import com.example.android.domain.home.Song
+import com.example.android.domain.home.PopularSong
+import com.example.android.domain.home.TopArtist
 import retrofit2.HttpException
 
 class HomeRepositoryImpl(
@@ -13,17 +15,44 @@ class HomeRepositoryImpl(
     private val tokenStore: TokenStore
 ) : HomeRepository {
     override suspend fun getRecentSongs(): List<Song> {
+        val songs = authenticated(api::recentSongs)
+        return songs.map { it.toDomain() }
+    }
+
+    override suspend fun getPopularSongs(): List<PopularSong> =
+        authenticated(api::popularSongs).map {
+            PopularSong(
+                Song(
+                    it.id, it.title, it.artist.name, it.coverImageUrl,
+                    it.audioUrl, it.duration
+                ),
+                it.likeCount
+            )
+        }
+
+    override suspend fun getTopArtists(): List<TopArtist> =
+        authenticated(api::topArtists).map {
+            TopArtist(
+                profile = it.artist,
+                followerCount = it.followerCount,
+                sampleSong = Song(
+                    it.song.id, it.song.title, it.song.artist.name,
+                    it.song.coverImageUrl, it.song.audioUrl, it.song.duration
+                )
+            )
+        }
+
+    private suspend fun <T> authenticated(block: suspend (String) -> T): T {
         val accessToken = tokenStore.accessToken ?: throw AuthenticationRequiredException()
-        val songs = try {
-            api.recentSongs(accessToken.asBearer())
+        return try {
+            block(accessToken.asBearer())
         } catch (error: HttpException) {
             if (error.code() != UNAUTHORIZED) throw error
             val refreshToken = tokenStore.refreshToken ?: throw AuthenticationRequiredException()
             val refreshed = api.refresh(RefreshRequest(refreshToken))
             tokenStore.save(refreshed.access)
-            api.recentSongs(refreshed.access.asBearer())
+            block(refreshed.access.asBearer())
         }
-        return songs.map { it.toDomain() }
     }
 
     private fun SongDto.toDomain() = Song(

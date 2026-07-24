@@ -132,6 +132,69 @@ class ApiAuthorizationTests(TestCase):
         self.assertEqual(response.data[0]["title"], "Song 11")
         self.assertEqual(response.data[-1]["title"], "Song 2")
 
+    def test_top_artists_returns_at_most_ten_ranked_by_followers_with_one_song(self):
+        artists = []
+        for index in range(11):
+            artist = User.objects.create_user(
+                email=f"artist-{index}@example.com",
+                password="password123!",
+                name=f"Artist {index:02d}",
+            )
+            Song.objects.create(
+                title=f"Artist Song {index}",
+                artist=artist,
+                cover_image_url=f"https://media.example.com/artist-{index}.jpg",
+                audio_url=f"https://media.example.com/artist-{index}.mp3",
+                is_published=True,
+            )
+            artists.append(artist)
+        UserFollow.objects.create(follower=self.owner, following=artists[-1])
+        UserFollow.objects.create(follower=self.other, following=artists[-1])
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get("/api/users/top-artists/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 10)
+        self.assertEqual(response.data[0]["artist"]["id"], str(artists[-1].pk))
+        self.assertEqual(response.data[0]["follower_count"], 2)
+        self.assertEqual(
+            response.data[0]["song"]["title"],
+            "Artist Song 10",
+        )
+
+    def test_popular_songs_uses_liked_playlists_and_returns_at_most_ten(self):
+        songs = []
+        owner_liked = Playlist.objects.get(owner=self.owner, is_liked=True)
+        other_liked = Playlist.objects.get(owner=self.other, is_liked=True)
+        for index in range(11):
+            song = Song.objects.create(
+                title=f"Popular Song {index}",
+                artist=self.owner,
+                cover_image_url=f"https://media.example.com/popular-{index}.jpg",
+                audio_url=f"https://media.example.com/popular-{index}.mp3",
+                is_published=True,
+            )
+            PlaylistSong.objects.create(
+                playlist=owner_liked,
+                song=song,
+                position=index,
+            )
+            songs.append(song)
+        PlaylistSong.objects.create(
+            playlist=other_liked,
+            song=songs[-1],
+            position=0,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get("/api/songs/popular/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 10)
+        self.assertEqual(response.data[0]["id"], str(songs[-1].pk))
+        self.assertEqual(response.data[0]["like_count"], 2)
+
     def test_song_search_matches_title_and_singer_with_pagination(self):
         singer = User.objects.create_user(
             email="singer@example.com",

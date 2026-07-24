@@ -82,6 +82,8 @@ fun SpotifyNavGraph(
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
     val pagedDownloads = downloadsViewModel.pagedSongs.collectAsLazyPagingItems()
     val playlistsState by playlistsViewModel.state.collectAsStateWithLifecycle()
+    val pagedPlaylists = playlistsViewModel.playlists.collectAsLazyPagingItems()
+    val pagedPlaylistSongs = playlistsViewModel.songs.collectAsLazyPagingItems()
     LaunchedEffect(profileState.user?.id) {
         val userId = profileState.user?.id
         playbackViewModel.setActiveUser(userId)
@@ -176,7 +178,7 @@ fun SpotifyNavGraph(
                 )
             }
             composable(Screen.Playlists.route) {
-                PlaylistsScreen(playlistsState) {
+                PlaylistsScreen(pagedPlaylists) {
                     navController.navigate(Screen.PlaylistDetail.route(it))
                 }
             }
@@ -185,6 +187,7 @@ fun SpotifyNavGraph(
                 LaunchedEffect(id) { playlistsViewModel.load(id) }
                 PlaylistDetailScreen(
                     playlistsState,
+                    pagedPlaylistSongs,
                     playbackViewModel::playFromPlaylist,
                     playbackViewModel::startPlaylist,
                     playlistsViewModel::removeSong,
@@ -228,7 +231,8 @@ fun SpotifyNavGraph(
                     onSeek = playbackViewModel::seekTo,
                     onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
-                    playlists = playlistsState.playlists,
+                    playlists = pagedPlaylists,
+                    addedMemberships = playlistsState.addedMemberships,
                     onAddToPlaylist = playlistsViewModel::addSong,
                     onCreatePlaylist = playlistsViewModel::create,
                     onNext = playbackViewModel::next,

@@ -163,17 +163,28 @@ class ApiAuthorizationTests(TestCase):
         )
         self.api_client.force_authenticate(user=self.owner)
 
-        response = self.api_client.get("/api/playlists/me/")
+        response = self.api_client.get("/api/playlists/me/?page=1&page_size=10")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        self.assertTrue(response.data["results"])
         self.assertTrue(
-            all(item["owner"]["id"] == str(self.owner.pk) for item in response.data)
+            all(
+                item["owner"]["id"] == str(self.owner.pk)
+                for item in response.data["results"]
+            )
         )
-        self.assertTrue(any(item["is_liked"] for item in response.data))
+        self.assertTrue(any(item["is_liked"] for item in response.data["results"]))
         self.assertFalse(
-            any(item["title"] == "Other Public Playlist" for item in response.data)
+            any(
+                item["title"] == "Other Public Playlist"
+                for item in response.data["results"]
+            )
         )
+        self.assertTrue(all("song_count" in item for item in response.data["results"]))
 
     def test_owner_can_add_song_and_get_next_song(self):
         first = Song.objects.create(
@@ -203,6 +214,17 @@ class ApiAuthorizationTests(TestCase):
             "position"
         )
         self.assertEqual(list(entries.values_list("position", flat=True)), [0, 1])
+
+        songs_page = self.api_client.get(
+            f"/api/playlists/{self.playlist.pk}/songs/?page=1&page_size=1"
+        )
+        self.assertEqual(songs_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(songs_page.data["count"], 2)
+        self.assertIsNotNone(songs_page.data["next"])
+        self.assertEqual(len(songs_page.data["results"]), 1)
+        self.assertEqual(songs_page.data["results"][0]["id"], str(first.pk))
+        self.assertIn("artist", songs_page.data["results"][0])
+        self.assertIn("audio_url", songs_page.data["results"][0])
 
         start_response = self.api_client.post(
             f"/api/playlists/{self.playlist.pk}/next-song/",

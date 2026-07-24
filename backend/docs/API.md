@@ -55,8 +55,9 @@ creation, the OpenAPI schema, and Swagger UI.
 - Durations use Django REST Framework's duration format:
   `"[days] HH:MM:SS[.ffffff]"`. Examples are `"00:03:42"` and
   `"2 04:00:00"`.
-- List endpoints currently return a plain JSON array because pagination is not
-  enabled.
+- Paginated endpoints accept `page` and `page_size`. The default page size is
+  10 and the server-enforced maximum is 100. Their JSON envelope contains
+  `count`, `next`, `previous`, and `results`.
 - Fields documented as read-only must not be relied upon in request bodies.
   The server derives or manages them.
 
@@ -520,7 +521,15 @@ or a staff user can update or delete a song.
 GET /api/songs/
 ```
 
-Response — `200 OK`: an array of accessible song objects.
+Accepts `page` and `page_size`:
+
+```http
+GET /api/songs/?page=1&page_size=10
+```
+
+Response — `200 OK`: a pagination envelope whose `results` contains complete
+accessible song objects. Songs use stable `created_at` descending then UUID
+ordering.
 
 ### 5.2 Get the 10 most recently added songs
 
@@ -711,18 +720,17 @@ registration. Its default title is `Liked Songs`, and it cannot be deleted.
   "description": "Music for the morning commute",
   "is_public": true,
   "is_liked": false,
-  "songs": [
-    "b90fdd61-f70c-41bf-8ad0-e5059f334c19"
-  ],
+  "song_count": 28,
   "follower_count": 12,
   "created_at": "2026-07-23T18:00:00Z",
   "updated_at": "2026-07-23T18:00:00Z"
 }
 ```
 
-The `songs` field contains song UUIDs in playback order, not nested song
-objects. `owner`, `is_liked`, `songs`, `follower_count`, IDs, and timestamps
-are read-only. Add songs through the dedicated song action described below.
+`song_count` lets Android display the playlist size without downloading song
+IDs. `owner`, `is_liked`, `song_count`, `follower_count`, IDs, and timestamps
+are read-only. Fetch complete songs through the dedicated paginated playlist
+songs endpoint.
 
 ### 6.1 List playlists
 
@@ -730,13 +738,14 @@ are read-only. Add songs through the dedicated song action described below.
 GET /api/playlists/
 ```
 
-Response — `200 OK`: an array containing public playlists and the current
-user's private playlists.
+Accepts `page` and `page_size`. Response — `200 OK`: a pagination envelope
+containing public playlists and the current user's private playlists. Ordering
+is stable: newest `created_at` first, then UUID.
 
 ### 6.2 List the authenticated user's playlists
 
 ```http
-GET /api/playlists/me/
+GET /api/playlists/me/?page=1&page_size=10
 ```
 
 Returns only playlists owned by the user identified by the JWT. This includes
@@ -745,33 +754,39 @@ by other users. Results are ordered newest first.
 
 There is no request body or user UUID path parameter.
 
-Response — `200 OK`: an array of playlist objects using the
-[Playlist JSON format](#playlist-json-format).
+`page` starts at 1. `page_size` defaults to 10 and is capped at 100.
+
+Response — `200 OK`: a Paging 3-compatible pagination envelope:
 
 ```json
-[
-  {
-    "id": "f11581a5-a501-427c-b2bd-abbca759097f",
-    "owner": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Ada Lovelace",
-      "email": "ada@example.com",
-      "premium_expires_at": null,
-      "has_active_premium": false,
-      "avatar_url": "https://media.example.com/avatars/ada.jpg",
-      "created_at": "2026-07-23T17:30:00Z",
-      "updated_at": "2026-07-23T17:30:00Z"
-    },
-    "title": "Liked Songs",
-    "description": "Songs liked by this user.",
-    "is_public": false,
-    "is_liked": true,
-    "songs": [],
-    "follower_count": 0,
-    "created_at": "2026-07-24T10:00:00Z",
-    "updated_at": "2026-07-24T10:00:00Z"
-  }
-]
+{
+  "count": 34,
+  "next": "http://10.0.2.2:8000/api/playlists/me/?page=2&page_size=10",
+  "previous": null,
+  "results": [
+    {
+      "id": "f11581a5-a501-427c-b2bd-abbca759097f",
+      "owner": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Ada Lovelace",
+        "email": "ada@example.com",
+        "premium_expires_at": null,
+        "has_active_premium": false,
+        "avatar_url": "https://media.example.com/avatars/ada.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "title": "Liked Songs",
+      "description": "Songs liked by this user.",
+      "is_public": false,
+      "is_liked": true,
+      "song_count": 28,
+      "follower_count": 0,
+      "created_at": "2026-07-24T10:00:00Z",
+      "updated_at": "2026-07-24T10:00:00Z"
+    }
+  ]
+}
 ```
 
 Missing or invalid JWT authentication returns `401 Unauthorized`.
@@ -792,8 +807,8 @@ Request:
 }
 ```
 
-The authenticated user becomes the owner. New playlists begin with an empty
-`songs` array. Response — `201 Created`: the complete playlist.
+The authenticated user becomes the owner. New playlists return
+`"song_count": 0`. Response — `201 Created`: the complete playlist.
 
 ### 6.4 Get one playlist
 
@@ -853,7 +868,52 @@ Liked Songs playlist returns `400 Bad Request`:
 ]
 ```
 
-### 6.8 Add a song to a playlist
+### 6.8 List a playlist's songs with pagination
+
+```http
+GET /api/playlists/{playlist_id}/songs/?page=1&page_size=10
+```
+
+Returns complete song objects in stable playlist-membership position order.
+This avoids one additional API request per song. The playlist must be public,
+owned by the authenticated user, or accessible to staff.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 28,
+  "next": "http://10.0.2.2:8000/api/playlists/f11581a5-a501-427c-b2bd-abbca759097f/songs/?page=2&page_size=10",
+  "previous": null,
+  "results": [
+    {
+      "id": "b90fdd61-f70c-41bf-8ad0-e5059f334c19",
+      "title": "Song title",
+      "artist": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Artist name",
+        "email": "artist@example.com",
+        "premium_expires_at": null,
+        "has_active_premium": false,
+        "avatar_url": "https://example.com/avatar.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "cover_image_url": "https://example.com/cover.jpg",
+      "audio_url": "https://example.com/song.mp3",
+      "duration": "00:03:42",
+      "is_published": true,
+      "created_at": "2026-07-23T17:40:00Z",
+      "updated_at": "2026-07-23T17:40:00Z"
+    }
+  ]
+}
+```
+
+`page_size` is capped at 100. An empty playlist returns the same envelope with
+`count: 0`, null navigation links, and an empty `results` array.
+
+### 6.9 Add a song to a playlist
 
 ```http
 POST /api/playlists/{id}/songs/
@@ -883,7 +943,7 @@ Adding the same song twice returns `400 Bad Request`:
 }
 ```
 
-### 6.9 Remove a song from a playlist
+### 6.10 Remove a song from a playlist
 
 ```http
 DELETE /api/playlists/{playlist_id}/songs/{song_id}/
@@ -913,7 +973,7 @@ If the song is not in the playlist, the endpoint returns `404 Not Found`:
 A non-owner receives `403 Forbidden`. Missing or invalid JWT authentication
 returns `401 Unauthorized`.
 
-### 6.10 Get the next song in a playlist
+### 6.11 Get the next song in a playlist
 
 ```http
 POST /api/playlists/{id}/next-song/

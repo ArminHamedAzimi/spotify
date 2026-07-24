@@ -94,6 +94,7 @@ import com.example.android.playback.PlaybackUiState
 import com.example.android.data.remote.PlaylistDto
 import com.example.android.ui.theme.AppDimens
 import com.example.android.ui.theme.PlayerVisuals
+import androidx.paging.compose.LazyPagingItems
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.sin
@@ -106,7 +107,8 @@ fun PlayerScreen(
     onSeek: (Long) -> Unit,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSleepTimerChange: (Int?) -> Unit,
-    playlists: List<PlaylistDto>,
+    playlists: LazyPagingItems<PlaylistDto>,
+    addedMemberships: Set<Pair<String, String>>,
     onAddToPlaylist: (String, String) -> Unit,
     onCreatePlaylist: (String, () -> Unit) -> Unit,
     onNext: () -> Unit,
@@ -170,11 +172,15 @@ fun PlayerScreen(
     if (showPlaylists) {
         ModalBottomSheet(onDismissRequest = { showPlaylists = false }) {
             Column(
-                modifier = Modifier.padding(AppDimens.spaceLarge),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(AppDimens.spaceLarge),
                 verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
             ) {
-                playlists.forEach { playlist ->
-                    val containsSong = state.mediaId in playlist.songs
+                repeat(playlists.itemCount) { index ->
+                    val playlist = playlists[index] ?: return@repeat
+                    val containsSong =
+                        state.mediaId?.let { playlist.id to it } in addedMemberships
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()

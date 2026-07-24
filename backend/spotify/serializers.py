@@ -96,7 +96,7 @@ class SongSerializer(serializers.ModelSerializer):
 class PlaylistSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     follower_count = serializers.IntegerField(read_only=True)
-    songs = serializers.SerializerMethodField()
+    song_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Playlist
@@ -107,7 +107,7 @@ class PlaylistSerializer(serializers.ModelSerializer):
             "description",
             "is_public",
             "is_liked",
-            "songs",
+            "song_count",
             "follower_count",
             "created_at",
             "updated_at",
@@ -116,18 +116,17 @@ class PlaylistSerializer(serializers.ModelSerializer):
             "id",
             "owner",
             "is_liked",
-            "songs",
+            "song_count",
             "follower_count",
             "created_at",
             "updated_at",
         )
 
-    @extend_schema_field(serializers.ListField(child=serializers.UUIDField()))
-    def get_songs(self, obj):
-        return [
-            str(entry.song_id)
-            for entry in obj.song_entries.all().order_by("position", "created_at")
-        ]
+    @extend_schema_field(serializers.IntegerField())
+    def get_song_count(self, obj):
+        if hasattr(obj, "song_count"):
+            return obj.song_count
+        return obj.song_entries.count()
 
 
 class AddPlaylistSongSerializer(serializers.Serializer):

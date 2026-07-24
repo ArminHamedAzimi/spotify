@@ -23,12 +23,15 @@ import androidx.compose.ui.res.stringResource
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.R
+import com.example.android.data.remote.PlaylistDto
 import com.example.android.domain.home.Song
 import com.example.android.ui.theme.AppDimens
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
 
 @Composable
-fun PlaylistsScreen(state: PlaylistsUiState, onOpen: (String) -> Unit) {
-    if (state.isLoading && state.playlists.isEmpty()) {
+fun PlaylistsScreen(playlists: LazyPagingItems<PlaylistDto>, onOpen: (String) -> Unit) {
+    if (playlists.loadState.refresh is LoadState.Loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
     }
@@ -43,7 +46,11 @@ fun PlaylistsScreen(state: PlaylistsUiState, onOpen: (String) -> Unit) {
                 style = MaterialTheme.typography.headlineSmall
             )
         }
-        items(state.playlists, key = { it.id }) { playlist ->
+        items(
+            count = playlists.itemCount,
+            key = { index -> playlists[index]?.id ?: index }
+        ) { index ->
+            val playlist = playlists[index] ?: return@items
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -91,7 +98,7 @@ fun PlaylistsScreen(state: PlaylistsUiState, onOpen: (String) -> Unit) {
                         Text(
                             stringResource(
                                 R.string.playlist_song_count,
-                                playlist.songs.size
+                                playlist.songCount
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -113,12 +120,25 @@ fun PlaylistsScreen(state: PlaylistsUiState, onOpen: (String) -> Unit) {
                 }
             }
         }
+        if (playlists.loadState.append is LoadState.Loading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppDimens.spaceMedium),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
     }
 }
 
 @Composable
 fun PlaylistDetailScreen(
     state: PlaylistsUiState,
+    songs: LazyPagingItems<Song>,
     onPlay: (Song, String, Boolean) -> Unit,
     onStart: (String, Boolean) -> Unit,
     onRemove: (String, String) -> Unit,
@@ -164,7 +184,11 @@ fun PlaylistDetailScreen(
                 }
             }
         }
-        items(state.songs, key = Song::id) { song ->
+        items(
+            count = songs.itemCount,
+            key = { index -> songs[index]?.id ?: index }
+        ) { index ->
+            val song = songs[index] ?: return@items
             val dismissState = rememberSwipeToDismissBoxState(
                 confirmValueChange = { value ->
                     if (value != SwipeToDismissBoxValue.Settled) {
@@ -241,6 +265,18 @@ fun PlaylistDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+        }
+        if (songs.loadState.append is LoadState.Loading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppDimens.spaceMedium),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
             }
         }

@@ -52,8 +52,15 @@ data class PlaylistDto(
     val description: String,
     @SerializedName("is_public") val isPublic: Boolean,
     @SerializedName("is_liked") val isLiked: Boolean,
-    val songs: List<String>,
+    @SerializedName("song_count") val songCount: Int,
     @SerializedName("follower_count") val followerCount: Int
+)
+
+data class PaginatedResponse<T>(
+    val count: Int,
+    val next: String?,
+    val previous: String?,
+    val results: List<T>
 )
 
 data class CreatePlaylistRequest(

@@ -10,6 +10,7 @@ import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface SpotifyApi {
     @POST("users/")
@@ -50,7 +51,11 @@ interface SpotifyApi {
     ): List<SongDto>
 
     @GET("playlists/me/")
-    suspend fun myPlaylists(@Header("Authorization") authorization: String): List<PlaylistDto>
+    suspend fun myPlaylists(
+        @Header("Authorization") authorization: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<PlaylistDto>
 
     @POST("playlists/")
     suspend fun createPlaylist(
@@ -63,6 +68,14 @@ interface SpotifyApi {
         @Header("Authorization") authorization: String,
         @Path("id") playlistId: String
     ): PlaylistDto
+
+    @GET("playlists/{id}/songs/")
+    suspend fun playlistSongs(
+        @Header("Authorization") authorization: String,
+        @Path("id") playlistId: String,
+        @Query("page") page: Int,
+        @Query("page_size") pageSize: Int
+    ): PaginatedResponse<SongDto>
 
     @GET("songs/{id}/")
     suspend fun song(

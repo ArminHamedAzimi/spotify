@@ -22,6 +22,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
 from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
+from .pagination import StandardResultsSetPagination
 from .permissions import (
     IsArtistOrReadOnly,
     IsFollowOwnerOrStaff,
@@ -161,14 +162,15 @@ class SongViewSet(viewsets.ModelViewSet):
     queryset = Song.objects.select_related("artist").all()
     serializer_class = SongSerializer
     permission_classes = (IsAuthenticated, IsArtistOrReadOnly)
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = cast(User, self.request.user)
         if user.is_staff:
-            return Song.objects.select_related("artist").all()
+            return Song.objects.select_related("artist").order_by("-created_at", "pk")
         return Song.objects.select_related("artist").filter(
             Q(is_published=True) | Q(artist=user)
-        )
+        ).order_by("-created_at", "pk")
 
     def perform_create(self, serializer):
         serializer.save(artist=cast(User, self.request.user))
@@ -176,7 +178,7 @@ class SongViewSet(viewsets.ModelViewSet):
     @extend_schema(responses={200: SongSerializer(many=True)})
     @action(detail=False, methods=("get",), url_path="recent")
     def recent(self, request):
-        songs = self.get_queryset().order_by("-created_at")[:10]
+        songs = self.get_queryset().order_by("-created_at", "pk")[:10]
         return Response(
             self.get_serializer(songs, many=True).data,
             status=status.HTTP_200_OK,
@@ -204,6 +206,7 @@ class PlaylistViewSet(viewsets.ModelViewSet):
     )
     serializer_class = PlaylistSerializer
     permission_classes = (IsAuthenticated, IsPlaylistOwnerOrReadOnly)
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = cast(User, self.request.user)
@@ -212,7 +215,13 @@ class PlaylistViewSet(viewsets.ModelViewSet):
         )
         if not user.is_staff:
             queryset = queryset.filter(Q(is_public=True) | Q(owner=user))
-        return queryset.annotate(follower_count=Count("followers", distinct=True))
+        return (
+            queryset.annotate(
+                follower_count=Count("followers", distinct=True),
+                song_count=Count("song_entries", distinct=True),
+            )
+            .order_by("-created_at", "pk")
+        )
 
     def perform_create(self, serializer):
         serializer.save(owner=cast(User, self.request.user))
@@ -225,24 +234,47 @@ class PlaylistViewSet(viewsets.ModelViewSet):
             Playlist.objects.filter(owner=user)
             .select_related("owner")
             .prefetch_related("song_entries__song")
-            .annotate(follower_count=Count("followers", distinct=True))
-            .order_by("-created_at")
+            .annotate(
+                follower_count=Count("followers", distinct=True),
+                song_count=Count("song_entries", distinct=True),
+            )
+            .order_by("-created_at", "pk")
         )
-        return Response(
-            self.get_serializer(playlists, many=True).data,
-            status=status.HTTP_200_OK,
-        )
+        page = self.paginate_queryset(playlists)
+        if page is not None:
+            return self.get_paginated_response(
+                self.get_serializer(page, many=True).data
+            )
+        return Response(self.get_serializer(playlists, many=True).data)
 
     def perform_destroy(self, instance):
         if instance.is_liked:
             raise ValidationError("The Liked Songs playlist cannot be deleted.")
         instance.delete()
 
+    @extend_schema(responses={200: SongSerializer(many=True)})
+    @action(detail=True, methods=("get",), url_path="songs")
+    def songs(self, request, pk=None):
+        playlist = self.get_object()
+        songs = (
+            Song.objects.filter(playlist_entries__playlist=playlist)
+            .select_related("artist")
+            .order_by(
+                "playlist_entries__position",
+                "playlist_entries__created_at",
+                "pk",
+            )
+        )
+        page = self.paginate_queryset(songs)
+        if page is not None:
+            return self.get_paginated_response(SongSerializer(page, many=True).data)
+        return Response(SongSerializer(songs, many=True).data)
+
     @extend_schema(
         request=AddPlaylistSongSerializer,
         responses={201: SongSerializer},
     )
-    @action(detail=True, methods=("post",), url_path="songs")
+    @songs.mapping.post
     def add_song(self, request, pk=None):
         input_serializer = AddPlaylistSongSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)

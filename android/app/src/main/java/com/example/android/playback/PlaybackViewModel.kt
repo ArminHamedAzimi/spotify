@@ -54,6 +54,7 @@ class PlaybackViewModel(
     private var progressJob: Job? = null
     private var sleepTimerJob: Job? = null
     private var selectedSleepTimerMinutes: Int? = null
+    private var activeUserId: String? = null
 
     private val _uiState = MutableStateFlow(PlaybackUiState())
     val uiState: StateFlow<PlaybackUiState> = _uiState.asStateFlow()
@@ -85,9 +86,13 @@ class PlaybackViewModel(
 
     fun play(song: Song) {
         val activeController = controller ?: return
-        val playableSong = downloads.resolve(song)
+        val playableSong = downloads.resolve(song, activeUserId)
         viewModelScope.launch {
-            if (activeController.currentMediaItem?.mediaId == playableSong.id) {
+            if (
+                activeController.currentMediaItem?.mediaId == playableSong.id &&
+                activeController.currentMediaItem?.localConfiguration?.uri?.toString() ==
+                playableSong.audioUrl
+            ) {
                 if (activeController.playbackState == Player.STATE_ENDED) {
                     activeController.seekToDefaultPosition()
                 }
@@ -111,6 +116,19 @@ class PlaybackViewModel(
                 PlaybackConfig.fullVolume
             )
         }
+    }
+
+    fun setActiveUser(userId: String?) {
+        if (activeUserId != userId) {
+            val currentUri = controller?.currentMediaItem
+                ?.localConfiguration
+                ?.uri
+            if (currentUri?.scheme == android.content.ContentResolver.SCHEME_FILE) {
+                controller?.stop()
+                controller?.clearMediaItems()
+            }
+        }
+        activeUserId = userId
     }
 
     fun togglePlayPause() {

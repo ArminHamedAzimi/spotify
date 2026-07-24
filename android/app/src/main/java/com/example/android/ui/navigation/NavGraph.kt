@@ -57,6 +57,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.playback.PlaybackViewModel
 import com.example.android.ui.theme.PlayerVisuals
+import androidx.paging.compose.collectAsLazyPagingItems
 
 @Composable
 fun SpotifyNavGraph(
@@ -73,7 +74,11 @@ fun SpotifyNavGraph(
     val profileState by profileViewModel.uiState
     val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
     val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+    val pagedDownloads = downloadsViewModel.pagedSongs.collectAsLazyPagingItems()
     LaunchedEffect(profileState.user?.id) {
+        val userId = profileState.user?.id
+        playbackViewModel.setActiveUser(userId)
+        downloadsViewModel.setActiveUser(userId)
         if (profileState.user != null) {
             homeViewModel.onEvent(HomeEvent.Refresh)
         }
@@ -140,7 +145,8 @@ fun SpotifyNavGraph(
             composable(Screen.Search.route) { SearchScreen() }
             composable(Screen.Downloads.route) {
                 DownloadsScreen(
-                    state = downloadsState,
+                    songs = pagedDownloads,
+                    isPremium = profileState.user?.hasActivePremium == true,
                     onSongClick = playbackViewModel::play
                 )
             }
@@ -190,6 +196,7 @@ fun SpotifyNavGraph(
                     onDownload = {
                         downloadsViewModel.download(
                             playbackState,
+                            profileState.user?.id,
                             profileState.user?.hasActivePremium == true
                         )
                     },

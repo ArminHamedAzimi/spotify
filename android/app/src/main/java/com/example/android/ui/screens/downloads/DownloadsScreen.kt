@@ -17,6 +17,8 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,15 +29,25 @@ import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.R
 import com.example.android.domain.home.Song
+import com.example.android.domain.downloads.DownloadedSong
 import com.example.android.ui.components.ModernPlaceholder
 import com.example.android.ui.theme.AppDimens
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
 
 @Composable
 fun DownloadsScreen(
-    state: DownloadsUiState,
+    songs: LazyPagingItems<DownloadedSong>,
+    isPremium: Boolean,
     onSongClick: (Song) -> Unit
 ) {
-    if (state.songs.isEmpty()) {
+    if (songs.loadState.refresh is LoadState.Loading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    if (songs.itemCount == 0) {
         ModernPlaceholder(R.string.downloads_empty, Icons.Rounded.CloudDownload)
         return
     }
@@ -45,18 +57,37 @@ fun DownloadsScreen(
         verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
     ) {
         item {
-            Text(
-                text = stringResource(R.string.downloaded_songs),
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)) {
+                Text(
+                    text = stringResource(R.string.downloaded_songs),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                if (!isPremium) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = stringResource(R.string.download_playback_premium_required),
+                            modifier = Modifier.padding(AppDimens.spaceMedium),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
         }
-        items(state.songs, key = { it.id }) { downloaded ->
+        items(
+            count = songs.itemCount,
+            key = { index -> songs[index]?.id ?: index }
+        ) { index ->
+            val downloaded = songs[index] ?: return@items
             val song = downloaded.toPlayableSong()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(MaterialTheme.shapes.medium)
-                    .clickable { onSongClick(song) }
+                    .clickable(enabled = isPremium) { onSongClick(song) }
                     .padding(AppDimens.spaceSmall),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
@@ -89,6 +120,18 @@ fun DownloadsScreen(
                     Icons.Rounded.CloudDownload,
                     contentDescription = stringResource(R.string.downloaded)
                 )
+            }
+        }
+        if (songs.loadState.append is LoadState.Loading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppDimens.spaceMedium),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }

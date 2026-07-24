@@ -96,4 +96,5 @@
     <string name="download_premium_required">دانلود آفلاین به اشتراک پریمیوم نیاز دارد. برای دانلود این آهنگ حساب خود را ارتقا دهید.</string>
     <string name="downloads_empty">آهنگ‌های دانلودشده شما اینجا نمایش داده می‌شوند.</string>
     <string name="downloaded_songs">آهنگ‌های دانلودشده</string>
+    <string name="download_playback_premium_required">دانلودهای شما ذخیره هستند، اما پخش از این بخش به اشتراک فعال پریمیوم نیاز دارد.</string>
 </resources>

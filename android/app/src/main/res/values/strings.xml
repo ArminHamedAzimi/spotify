@@ -96,4 +96,5 @@
     <string name="download_premium_required">Offline downloads require Premium. Upgrade your account to download this song.</string>
     <string name="downloads_empty">Your downloaded songs will appear here.</string>
     <string name="downloaded_songs">Downloaded songs</string>
+    <string name="download_playback_premium_required">Your downloads are saved, but playback from this tab requires an active Premium subscription.</string>
 </resources>

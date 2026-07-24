@@ -305,7 +305,82 @@ excluded. No matches returns `count: 0` and `results: []`.
 An empty or missing `q` returns `400 Bad Request`. Missing or invalid JWT
 authentication returns `401 Unauthorized`.
 
-### 4.4 Get one user by UUID
+### 4.4 Follow or unfollow a user
+
+Follow:
+
+```http
+POST /api/users/{user_id}/follow/
+```
+
+There is no request body. `{user_id}` is the active user to follow. The
+authenticated JWT user becomes the follower.
+
+Response — `201 Created` for a new relationship, or `200 OK` when it already
+exists:
+
+```json
+{
+  "id": "62481fc6-867b-4100-a75e-b784b31a45f3",
+  "follower": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Ada",
+    "avatar_url": "https://example.com/ada.jpg",
+    "has_active_premium": false
+  },
+  "following": {
+    "id": "f3ca373e-c936-4c7c-b649-f915e72e6a85",
+    "name": "Aurora",
+    "avatar_url": "https://example.com/aurora.jpg",
+    "has_active_premium": true
+  },
+  "created_at": "2026-07-24T12:00:00Z"
+}
+```
+
+Following yourself returns `400 Bad Request`.
+
+Unfollow:
+
+```http
+DELETE /api/users/{user_id}/follow/
+```
+
+There is no request body. It is idempotent and returns `204 No Content`,
+including when no relationship currently exists.
+
+### 4.5 List a user's followers
+
+```http
+GET /api/users/{user_id}/followers/?page=1&page_size=10
+```
+
+Returns active public user profiles that follow `{user_id}`. The response uses
+the standard `count`, `next`, `previous`, and `results` pagination envelope.
+Results are stably ordered by name then UUID. Page size is capped at 100.
+
+### 4.6 List users somebody follows
+
+```http
+GET /api/users/{user_id}/following/?page=1&page_size=10
+```
+
+Returns active public profiles followed by `{user_id}`, using the same
+pagination envelope and public profile format as the followers endpoint.
+
+### 4.7 List somebody else's public playlists
+
+```http
+GET /api/users/{user_id}/playlists/?page=1&page_size=10
+```
+
+Returns only public playlists owned by the specified active user. Private
+playlists and Liked Songs are excluded. Results use stable newest-first
+ordering and the standard pagination envelope. Each result includes
+`song_count`, so Android does not need to download the songs page merely to
+show its size.
+
+### 4.8 Get one user by UUID
 
 ```http
 GET /api/users/{id}/
@@ -316,7 +391,7 @@ staff/admin users can retrieve any user.
 
 Response — `200 OK`: one user object in the same format shown above.
 
-### 4.5 Replace a user
+### 4.9 Replace a user
 
 ```http
 PUT /api/users/{id}/
@@ -336,7 +411,7 @@ Request:
 The password may be omitted to keep the existing password. It is write-only.
 Response — `200 OK`: the updated user without the password.
 
-### 4.6 Partially update a user
+### 4.10 Partially update a user
 
 ```http
 PATCH /api/users/{id}/
@@ -360,7 +435,7 @@ To change the password:
 
 Response — `200 OK`: the updated user object.
 
-### 4.7 Delete a user
+### 4.11 Delete a user
 
 ```http
 DELETE /api/users/{id}/
@@ -369,7 +444,7 @@ DELETE /api/users/{id}/
 There is no request or response JSON body. Success returns `204 No Content`.
 Deleting a user also deletes playlists and follow records owned by that user.
 
-### 4.8 Upload or replace the current user's avatar
+### 4.12 Upload or replace the current user's avatar
 
 ```http
 POST /api/users/avatar/
@@ -468,7 +543,7 @@ Example validation error — `400 Bad Request`:
 An unsupported or invalid image also returns `400`. Missing or invalid JWT
 authentication returns `401 Unauthorized`.
 
-### 4.9 Add or extend a subscription
+### 4.13 Add or extend a subscription
 
 ```http
 POST /api/users/subscription/
@@ -815,6 +890,8 @@ can update or delete a playlist.
 Every user owns exactly one private playlist with `"is_liked": true`. Existing
 users receive it through a database migration and new users receive it during
 registration. Its default title is `Liked Songs`, and it cannot be deleted.
+The visibility migration makes all pre-existing normal playlists public;
+Liked Songs remains private.
 
 ### Playlist JSON format
 
@@ -967,7 +1044,27 @@ Example:
 
 Response — `200 OK`: the updated playlist.
 
-### 6.7 Delete a playlist
+### 6.7 Change a playlist between public and private
+
+```http
+PATCH /api/playlists/{id}/visibility/
+```
+
+Only the playlist owner or staff/admin can change visibility.
+
+Request:
+
+```json
+{
+  "is_public": true
+}
+```
+
+Set `is_public` to `false` to make it private. Response — `200 OK`: the updated
+playlist object. The special Liked Songs playlist must remain private; trying
+to make it public returns `400 Bad Request`.
+
+### 6.8 Delete a playlist
 
 ```http
 DELETE /api/playlists/{id}/
@@ -983,7 +1080,7 @@ Liked Songs playlist returns `400 Bad Request`:
 ]
 ```
 
-### 6.8 List a playlist's songs with pagination
+### 6.9 List a playlist's songs with pagination
 
 ```http
 GET /api/playlists/{playlist_id}/songs/?page=1&page_size=10
@@ -1028,7 +1125,7 @@ Response — `200 OK`:
 `page_size` is capped at 100. An empty playlist returns the same envelope with
 `count: 0`, null navigation links, and an empty `results` array.
 
-### 6.9 Add a song to a playlist
+### 6.10 Add a song to a playlist
 
 ```http
 POST /api/playlists/{id}/songs/
@@ -1058,7 +1155,7 @@ Adding the same song twice returns `400 Bad Request`:
 }
 ```
 
-### 6.10 Remove a song from a playlist
+### 6.11 Remove a song from a playlist
 
 ```http
 DELETE /api/playlists/{playlist_id}/songs/{song_id}/
@@ -1088,7 +1185,7 @@ If the song is not in the playlist, the endpoint returns `404 Not Found`:
 A non-owner receives `403 Forbidden`. Missing or invalid JWT authentication
 returns `401 Unauthorized`.
 
-### 6.11 Get the next song in a playlist
+### 6.12 Get the next song in a playlist
 
 ```http
 POST /api/playlists/{id}/next-song/
@@ -1250,7 +1347,280 @@ DELETE /api/playlist-follows/{id}/
 
 No JSON body. Success returns `204 No Content`.
 
-## 8. API documentation endpoints
+## 8. Real-time direct chat
+
+Direct messages use a persistent WebSocket connection. Do not poll the REST
+history endpoints for live updates. PostgreSQL stores every accepted message;
+Redis is used only for real-time channel delivery.
+
+### 8.1 Connect to another user
+
+Development Android Emulator URL:
+
+```text
+ws://10.0.2.2:8000/ws/chat/{other_user_id}/
+```
+
+Production must use `wss://`. `{other_user_id}` is the UUID of the person being
+messaged. Self-conversations are rejected.
+
+Recommended WebSocket handshake header:
+
+```http
+Authorization: Bearer <access-jwt>
+```
+
+For clients that cannot send handshake headers, a query-token fallback is
+supported:
+
+```text
+ws://10.0.2.2:8000/ws/chat/{other_user_id}/?token=<access-jwt>
+```
+
+Headers are safer because query strings may appear in proxy logs. Invalid or
+expired tokens close with code `4401`; self-chat uses `4403`; a missing target
+uses `4404`.
+
+After connection, the server sends:
+
+```json
+{
+  "type": "conversation.ready",
+  "conversation_id": "conversation-uuid",
+  "other_user": {
+    "id": "user-uuid",
+    "name": "Friend",
+    "avatar_url": "https://example.com/friend.jpg",
+    "has_active_premium": false
+  }
+}
+```
+
+### 8.2 Send a text message
+
+Client to server:
+
+```json
+{
+  "type": "message.send",
+  "client_message_id": "52fcf210-a111-4c2e-bb50-98f38de0ad40",
+  "message_type": "text",
+  "body": "Hello"
+}
+```
+
+`client_message_id` must be a newly generated UUID. Retrying the same UUID is
+idempotent and does not create a duplicate database message.
+
+The server broadcasts:
+
+```json
+{
+  "type": "message.created",
+  "message": {
+    "id": "message-uuid",
+    "conversation_id": "conversation-uuid",
+    "client_message_id": "52fcf210-a111-4c2e-bb50-98f38de0ad40",
+    "sender": {
+      "id": "sender-uuid",
+      "name": "Sender",
+      "avatar_url": "https://example.com/sender.jpg",
+      "has_active_premium": false
+    },
+    "message_type": "text",
+    "body": "Hello",
+    "song": null,
+    "status": "sent",
+    "delivered_at": null,
+    "read_at": null,
+    "created_at": "2026-07-24T20:30:00Z"
+  }
+}
+```
+
+### 8.3 Send/share a song
+
+Client to server:
+
+```json
+{
+  "type": "message.send",
+  "client_message_id": "f11e595f-6c9e-43b4-a500-6024e50f92db",
+  "message_type": "song",
+  "song_id": "song-uuid",
+  "body": "Listen to this"
+}
+```
+
+Only published songs can be shared. The resulting `message.created` includes a
+mini-card-ready `song` object:
+
+```json
+{
+  "id": "song-uuid",
+  "title": "Song title",
+  "artist": {
+    "id": "artist-uuid",
+    "name": "Artist",
+    "avatar_url": "https://example.com/artist.jpg",
+    "has_active_premium": true
+  },
+  "cover_image_url": "https://example.com/cover.jpg",
+  "audio_url": "https://example.com/audio.mp3",
+  "duration": "0:03:42"
+}
+```
+
+Android can render this directly as the custom mini card and pass `audio_url`
+to the player when tapped.
+
+### 8.4 Typing indicator
+
+Client to server when typing begins or ends:
+
+```json
+{
+  "type": "typing",
+  "is_typing": true
+}
+```
+
+The other connected user receives:
+
+```json
+{
+  "type": "typing",
+  "user_id": "typing-user-uuid",
+  "is_typing": true
+}
+```
+
+Typing events are ephemeral and are not stored in PostgreSQL.
+
+### 8.5 Delivery and read receipts
+
+Message UI states map as follows:
+
+- `sending` — Android-local state before `message.created` is received; show
+  the clock.
+- `sent` — persisted by the server; show one tick.
+- `delivered` — delivered to the recipient socket or fetched during offline
+  synchronization.
+- `read` — explicitly marked by the recipient; show two ticks.
+
+The recipient may send:
+
+```json
+{
+  "type": "message.delivered",
+  "message_id": "message-uuid"
+}
+```
+
+or:
+
+```json
+{
+  "type": "message.read",
+  "message_id": "message-uuid"
+}
+```
+
+The server broadcasts:
+
+```json
+{
+  "type": "message.receipt",
+  "message_id": "message-uuid",
+  "status": "read",
+  "delivered_at": "2026-07-24T20:30:02Z",
+  "read_at": "2026-07-24T20:30:05Z"
+}
+```
+
+Delivery is also marked automatically when the recipient socket receives a
+message or reconnects with pending messages.
+
+### 8.6 Paginated conversation list
+
+```http
+GET /api/chat/conversations/?page=1&page_size=10
+Authorization: Bearer <access-jwt>
+```
+
+Returns the standard pagination envelope. Each result contains:
+
+```json
+{
+  "id": "conversation-uuid",
+  "other_user": {
+    "id": "user-uuid",
+    "name": "Friend",
+    "avatar_url": "https://example.com/friend.jpg",
+    "has_active_premium": false
+  },
+  "last_message": {
+    "id": "message-uuid",
+    "message_type": "text",
+    "body": "Hello",
+    "status": "read",
+    "song": null,
+    "created_at": "2026-07-24T20:30:00Z"
+  },
+  "unread_count": 0,
+  "created_at": "2026-07-24T20:00:00Z",
+  "updated_at": "2026-07-24T20:30:00Z"
+}
+```
+
+Only conversations containing the authenticated user are returned. Ordering
+is newest activity first. Page size is capped at 100.
+
+### 8.7 Paginated message history and offline synchronization
+
+```http
+GET /api/chat/users/{other_user_id}/messages/?page=1&page_size=50
+Authorization: Bearer <access-jwt>
+```
+
+Returns complete message objects in newest-first stable order using `count`,
+`next`, `previous`, and `results`. Page size is capped at 100. Fetching history
+marks incoming undelivered messages as delivered and notifies a connected
+sender in real time.
+
+This endpoint is for initial load, reconnect synchronization, and Paging 3—not
+live polling. Android should upsert `results` into its Room database. Socket
+`message.created` and `message.receipt` events should update the same Room
+rows. This preserves chat history when internet connectivity is lost.
+
+### 8.8 REST read fallback
+
+```http
+POST /api/chat/messages/{message_id}/read/
+Authorization: Bearer <access-jwt>
+```
+
+There is no request body. Only the recipient can mark a message read. The
+response is the updated message, and the sender receives a real-time
+`message.receipt` event when connected.
+
+### 8.9 WebSocket errors
+
+Protocol validation errors do not close the connection:
+
+```json
+{
+  "type": "error",
+  "code": "invalid_client_message_id",
+  "detail": "client_message_id must be a UUID."
+}
+```
+
+Possible codes include `unsupported_event`, `invalid_client_message_id`,
+`empty_message`, `missing_song`, `invalid_message_type`, `song_not_found`,
+`invalid_message_id`, and `message_not_found`.
+
+## 9. API documentation endpoints
 
 ### OpenAPI schema
 
@@ -1268,7 +1638,7 @@ GET /api/docs/
 
 Returns an interactive HTML API explorer. No authentication is required.
 
-## 9. Errors and status codes
+## 10. Errors and status codes
 
 Common status codes:
 
@@ -1303,7 +1673,7 @@ A missing JWT commonly returns:
 }
 ```
 
-## 10. Password hashing and security
+## 11. Password hashing and security
 
 The Android application sends the plaintext password only inside an HTTPS JSON
 request during registration, login, or password change. Production traffic
@@ -1334,7 +1704,7 @@ JWTs are signed authentication credentials, not password hashes. The Android
 client should treat access and refresh tokens as secrets and store them using
 Android Keystore-backed encrypted storage.
 
-## 11. MinIO media URLs
+## 12. MinIO media URLs
 
 MinIO provides S3-compatible object storage:
 

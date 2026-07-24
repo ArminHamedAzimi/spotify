@@ -2,7 +2,15 @@ from django.contrib.auth.password_validation import validate_password
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import Playlist, PlaylistFollow, Song, User
+from .models import (
+    DirectConversation,
+    DirectMessage,
+    Playlist,
+    PlaylistFollow,
+    Song,
+    User,
+    UserFollow,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -63,6 +71,16 @@ class UserSearchQuerySerializer(serializers.Serializer):
     )
 
 
+class UserFollowSerializer(serializers.ModelSerializer):
+    follower = PublicUserProfileSerializer(read_only=True)
+    following = PublicUserProfileSerializer(read_only=True)
+
+    class Meta:
+        model = UserFollow
+        fields = ("id", "follower", "following", "created_at")
+        read_only_fields = fields
+
+
 class AvatarUploadSerializer(serializers.Serializer):
     avatar = serializers.ImageField(write_only=True)
 
@@ -109,6 +127,87 @@ class SongSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "artist", "created_at", "updated_at")
 
 
+class SharedSongSerializer(serializers.ModelSerializer):
+    artist = PublicUserProfileSerializer(read_only=True)
+
+    class Meta:
+        model = Song
+        fields = (
+            "id",
+            "title",
+            "artist",
+            "cover_image_url",
+            "audio_url",
+            "duration",
+        )
+        read_only_fields = fields
+
+
+class DirectMessageSerializer(serializers.ModelSerializer):
+    sender = PublicUserProfileSerializer(read_only=True)
+    song = SharedSongSerializer(read_only=True)
+    status = serializers.CharField(source="receipt_status", read_only=True)
+
+    class Meta:
+        model = DirectMessage
+        fields = (
+            "id",
+            "conversation",
+            "client_message_id",
+            "sender",
+            "message_type",
+            "body",
+            "song",
+            "status",
+            "delivered_at",
+            "read_at",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class DirectConversationSerializer(serializers.ModelSerializer):
+    other_user = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DirectConversation
+        fields = (
+            "id",
+            "other_user",
+            "last_message",
+            "unread_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(PublicUserProfileSerializer)
+    def get_other_user(self, obj):
+        request = self.context["request"]
+        other = obj.user_two if obj.user_one_id == request.user.pk else obj.user_one
+        return PublicUserProfileSerializer(other).data
+
+    @extend_schema_field(DirectMessageSerializer)
+    def get_last_message(self, obj):
+        message = (
+            obj.messages.select_related("sender", "song__artist")
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        return DirectMessageSerializer(message).data if message else None
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_unread_count(self, obj):
+        request = self.context["request"]
+        return (
+            obj.messages.filter(read_at__isnull=True)
+            .exclude(sender=request.user)
+            .count()
+        )
+
+
 class PlaylistSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     follower_count = serializers.IntegerField(read_only=True)
@@ -147,6 +246,10 @@ class PlaylistSerializer(serializers.ModelSerializer):
 
 class AddPlaylistSongSerializer(serializers.Serializer):
     song_id = serializers.UUIDField()
+
+
+class PlaylistVisibilitySerializer(serializers.Serializer):
+    is_public = serializers.BooleanField()
 
 
 class PlaylistNextSongSerializer(serializers.Serializer):

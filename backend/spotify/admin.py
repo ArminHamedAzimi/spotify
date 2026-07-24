@@ -1,7 +1,16 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
+from .models import (
+    DirectConversation,
+    DirectMessage,
+    Playlist,
+    PlaylistFollow,
+    PlaylistSong,
+    Song,
+    User,
+    UserFollow,
+)
 
 
 @admin.register(User)
@@ -96,4 +105,46 @@ class PlaylistSongAdmin(admin.ModelAdmin):
     search_fields = ("playlist__title", "song__title")
     autocomplete_fields = ("playlist", "song")
     ordering = ("playlist", "position")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(UserFollow)
+class UserFollowAdmin(admin.ModelAdmin):
+    list_display = ("follower", "following", "created_at")
+    search_fields = (
+        "follower__name",
+        "follower__email",
+        "following__name",
+        "following__email",
+    )
+    autocomplete_fields = ("follower", "following")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(DirectConversation)
+class DirectConversationAdmin(admin.ModelAdmin):
+    list_display = ("user_one", "user_two", "updated_at")
+    search_fields = (
+        "user_one__name",
+        "user_one__email",
+        "user_two__name",
+        "user_two__email",
+    )
+    autocomplete_fields = ("user_one", "user_two")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(DirectMessage)
+class DirectMessageAdmin(admin.ModelAdmin):
+    list_display = (
+        "sender",
+        "message_type",
+        "conversation",
+        "delivered_at",
+        "read_at",
+        "created_at",
+    )
+    list_filter = ("message_type", "created_at", "delivered_at", "read_at")
+    search_fields = ("sender__name", "sender__email", "body")
+    autocomplete_fields = ("conversation", "sender", "song")
     readonly_fields = ("created_at", "updated_at")

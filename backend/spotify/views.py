@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import quote
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Count, Max, Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -21,7 +24,16 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
-from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
+from .models import (
+    DirectConversation,
+    DirectMessage,
+    Playlist,
+    PlaylistFollow,
+    PlaylistSong,
+    Song,
+    User,
+    UserFollow,
+)
 from .pagination import StandardResultsSetPagination
 from .permissions import (
     IsArtistOrReadOnly,
@@ -33,9 +45,12 @@ from .serializers import (
     AvatarUploadResponseSerializer,
     AvatarUploadSerializer,
     AddPlaylistSongSerializer,
+    DirectConversationSerializer,
+    DirectMessageSerializer,
     PlaylistFollowSerializer,
     PlaylistSerializer,
     PlaylistNextSongSerializer,
+    PlaylistVisibilitySerializer,
     PublicUserProfileSerializer,
     RandomNextSongSerializer,
     SongSerializer,
@@ -43,6 +58,7 @@ from .serializers import (
     SubscriptionResponseSerializer,
     SubscriptionSerializer,
     UserSerializer,
+    UserFollowSerializer,
     UserSearchQuerySerializer,
 )
 
@@ -74,7 +90,14 @@ class UserViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         if self.action == "list":
             return [IsAdminUser()]
-        if self.action in {"me", "search"}:
+        if self.action in {
+            "me",
+            "search",
+            "follow",
+            "followers",
+            "following",
+            "playlists",
+        }:
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -102,6 +125,86 @@ class UserViewSet(viewsets.ModelViewSet):
                 PublicUserProfileSerializer(page, many=True).data
             )
         return Response(PublicUserProfileSerializer(users, many=True).data)
+
+    @extend_schema(
+        request=None,
+        responses={200: UserFollowSerializer, 201: UserFollowSerializer},
+    )
+    @action(detail=True, methods=("post",), url_path="follow")
+    def follow(self, request, pk=None):
+        follower = cast(User, request.user)
+        following = get_object_or_404(User, pk=pk, is_active=True)
+        if follower.pk == following.pk:
+            raise ValidationError("You cannot follow yourself.")
+        relationship, created = UserFollow.objects.get_or_create(
+            follower=follower,
+            following=following,
+        )
+        return Response(
+            UserFollowSerializer(relationship).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @extend_schema(request=None, responses={204: None})
+    @follow.mapping.delete
+    def unfollow(self, request, pk=None):
+        follower = cast(User, request.user)
+        following = get_object_or_404(User, pk=pk, is_active=True)
+        UserFollow.objects.filter(
+            follower=follower,
+            following=following,
+        ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(responses={200: PublicUserProfileSerializer(many=True)})
+    @action(detail=True, methods=("get",), url_path="followers")
+    def followers(self, request, pk=None):
+        target = get_object_or_404(User, pk=pk, is_active=True)
+        users = User.objects.filter(
+            is_active=True,
+            following_relationships__following=target,
+        ).order_by("name", "pk")
+        page = self.paginate_queryset(users)
+        if page is not None:
+            return self.get_paginated_response(
+                PublicUserProfileSerializer(page, many=True).data
+            )
+        return Response(PublicUserProfileSerializer(users, many=True).data)
+
+    @extend_schema(responses={200: PublicUserProfileSerializer(many=True)})
+    @action(detail=True, methods=("get",), url_path="following")
+    def following(self, request, pk=None):
+        target = get_object_or_404(User, pk=pk, is_active=True)
+        users = User.objects.filter(
+            is_active=True,
+            follower_relationships__follower=target,
+        ).order_by("name", "pk")
+        page = self.paginate_queryset(users)
+        if page is not None:
+            return self.get_paginated_response(
+                PublicUserProfileSerializer(page, many=True).data
+            )
+        return Response(PublicUserProfileSerializer(users, many=True).data)
+
+    @extend_schema(responses={200: PlaylistSerializer(many=True)})
+    @action(detail=True, methods=("get",), url_path="playlists")
+    def playlists(self, request, pk=None):
+        target = get_object_or_404(User, pk=pk, is_active=True)
+        playlists = (
+            Playlist.objects.filter(owner=target, is_public=True)
+            .select_related("owner")
+            .annotate(
+                follower_count=Count("followers", distinct=True),
+                song_count=Count("song_entries", distinct=True),
+            )
+            .order_by("-created_at", "pk")
+        )
+        page = self.paginate_queryset(playlists)
+        if page is not None:
+            return self.get_paginated_response(
+                PlaylistSerializer(page, many=True).data
+            )
+        return Response(PlaylistSerializer(playlists, many=True).data)
 
     @extend_schema(
         request=AvatarUploadSerializer,
@@ -295,6 +398,26 @@ class PlaylistViewSet(viewsets.ModelViewSet):
             raise ValidationError("The Liked Songs playlist cannot be deleted.")
         instance.delete()
 
+    @extend_schema(
+        request=PlaylistVisibilitySerializer,
+        responses={200: PlaylistSerializer},
+    )
+    @action(detail=True, methods=("patch",), url_path="visibility")
+    def visibility(self, request, pk=None):
+        input_serializer = PlaylistVisibilitySerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        playlist = self.get_object()
+        is_public = input_serializer.validated_data["is_public"]
+        if playlist.is_liked and is_public:
+            raise ValidationError("The Liked Songs playlist must remain private.")
+        playlist.is_public = is_public
+        playlist.save(update_fields=["is_public", "updated_at"])
+        refreshed = self.get_queryset().get(pk=playlist.pk)
+        return Response(
+            self.get_serializer(refreshed).data,
+            status=status.HTTP_200_OK,
+        )
+
     @extend_schema(responses={200: SongSerializer(many=True)})
     @action(detail=True, methods=("get",), url_path="songs")
     def songs(self, request, pk=None):
@@ -441,3 +564,150 @@ class PlaylistFollowViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=cast(User, self.request.user))
+
+
+class ChatViewSet(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+    pagination_class = StandardResultsSetPagination
+
+    @property
+    def paginator(self):
+        if not hasattr(self, "_paginator"):
+            self._paginator = self.pagination_class()
+        return self._paginator
+
+    def paginate_queryset(self, queryset):
+        return self.paginator.paginate_queryset(queryset, self.request, view=self)
+
+    def get_paginated_response(self, data):
+        return self.paginator.get_paginated_response(data)
+
+    @extend_schema(responses={200: DirectConversationSerializer(many=True)})
+    @action(detail=False, methods=("get",), url_path="conversations")
+    def conversations(self, request):
+        user = cast(User, request.user)
+        conversations = (
+            DirectConversation.objects.filter(Q(user_one=user) | Q(user_two=user))
+            .select_related("user_one", "user_two")
+            .order_by("-updated_at", "-id")
+        )
+        page = self.paginate_queryset(conversations)
+        serializer = DirectConversationSerializer(
+            page,
+            many=True,
+            context={"request": request},
+        )
+        return self.get_paginated_response(serializer.data)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="user_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the other user in the direct conversation.",
+            )
+        ],
+        responses={200: DirectMessageSerializer(many=True)},
+    )
+    @action(
+        detail=False,
+        methods=("get",),
+        url_path=r"users/(?P<user_id>[^/.]+)/messages",
+    )
+    def messages(self, request, user_id=None):
+        user = cast(User, request.user)
+        target = get_object_or_404(User, pk=user_id, is_active=True)
+        if user.pk == target.pk:
+            raise ValidationError("A direct conversation requires another user.")
+        first_id, second_id = sorted((user.pk, target.pk), key=str)
+        conversation, _ = DirectConversation.objects.get_or_create(
+            user_one_id=first_id,
+            user_two_id=second_id,
+        )
+        now = timezone.now()
+        pending_message_ids = list(
+            DirectMessage.objects.filter(
+                conversation=conversation,
+                delivered_at__isnull=True,
+            )
+            .exclude(sender=user)
+            .values_list("pk", flat=True)
+        )
+        DirectMessage.objects.filter(
+            conversation=conversation,
+            delivered_at__isnull=True,
+        ).exclude(sender=user).update(delivered_at=now, updated_at=now)
+        channel_layer = get_channel_layer()
+        for message_id in pending_message_ids:
+            async_to_sync(channel_layer.group_send)(
+                f"chat.{conversation.pk}",
+                {
+                    "type": "chat.receipt",
+                    "receipt": {
+                        "message_id": str(message_id),
+                        "status": "delivered",
+                        "delivered_at": now.isoformat().replace("+00:00", "Z"),
+                        "read_at": None,
+                    },
+                },
+            )
+        messages = (
+            DirectMessage.objects.filter(conversation=conversation)
+            .select_related("sender", "song__artist")
+            .order_by("-created_at", "-id")
+        )
+        page = self.paginate_queryset(messages)
+        return self.get_paginated_response(
+            DirectMessageSerializer(page, many=True).data
+        )
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="message_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the received message to mark as read.",
+            )
+        ],
+        request=None,
+        responses={200: DirectMessageSerializer},
+    )
+    @action(
+        detail=False,
+        methods=("post",),
+        url_path=r"messages/(?P<message_id>[^/.]+)/read",
+    )
+    def read_message(self, request, message_id=None):
+        user = cast(User, request.user)
+        message = get_object_or_404(
+            DirectMessage.objects.select_related("sender", "song__artist"),
+            pk=message_id,
+            conversation__in=DirectConversation.objects.filter(
+                Q(user_one=user) | Q(user_two=user)
+            ),
+        )
+        if message.sender_id == user.pk:
+            raise ValidationError("A sender cannot mark their own message as read.")
+        now = timezone.now()
+        if message.delivered_at is None:
+            message.delivered_at = now
+        if message.read_at is None:
+            message.read_at = now
+        message.save(update_fields=["delivered_at", "read_at", "updated_at"])
+        async_to_sync(get_channel_layer().group_send)(
+            f"chat.{message.conversation_id}",
+            {
+                "type": "chat.receipt",
+                "receipt": {
+                    "message_id": str(message.pk),
+                    "status": "read",
+                    "delivered_at": message.delivered_at.isoformat().replace(
+                        "+00:00", "Z"
+                    ),
+                    "read_at": message.read_at.isoformat().replace("+00:00", "Z"),
+                },
+            },
+        )
+        return Response(DirectMessageSerializer(message).data)

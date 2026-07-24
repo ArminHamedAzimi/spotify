@@ -54,6 +54,128 @@ class User(AbstractUser):
         )
 
 
+class UserFollow(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    follower = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="following_relationships",
+    )
+    following = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="follower_relationships",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["follower", "following"],
+                name="unique_user_follow",
+            ),
+            models.CheckConstraint(
+                condition=~Q(follower=models.F("following")),
+                name="prevent_self_follow",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.follower} follows {self.following}"
+
+
+class DirectConversation(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_one = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_conversations_as_one",
+    )
+    user_two = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_conversations_as_two",
+    )
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user_one", "user_two"],
+                name="unique_direct_conversation",
+            ),
+            models.CheckConstraint(
+                condition=Q(user_one__lt=models.F("user_two")),
+                name="canonical_direct_conversation_users",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_one} ↔ {self.user_two}"
+
+
+class DirectMessage(TimeStampedModel):
+    class MessageType(models.TextChoices):
+        TEXT = "text", "Text"
+        SONG = "song", "Song"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        DirectConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_direct_messages",
+    )
+    client_message_id = models.UUIDField(default=uuid.uuid4)
+    message_type = models.CharField(
+        max_length=10,
+        choices=MessageType.choices,
+        default=MessageType.TEXT,
+    )
+    body = models.TextField(blank=True)
+    song = models.ForeignKey(
+        "Song",
+        on_delete=models.PROTECT,
+        related_name="shared_in_messages",
+        null=True,
+        blank=True,
+    )
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sender", "client_message_id"],
+                name="unique_sender_client_message",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(message_type="text", song__isnull=True)
+                    & ~Q(body="")
+                    | Q(message_type="song", song__isnull=False)
+                ),
+                name="valid_direct_message_content",
+            ),
+        ]
+
+    @property
+    def receipt_status(self) -> str:
+        if self.read_at:
+            return "read"
+        if self.delivered_at:
+            return "delivered"
+        return "sent"
+
+    def __str__(self):
+        return f"{self.sender}: {self.message_type} ({self.created_at})"
+
+
 class Song(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)

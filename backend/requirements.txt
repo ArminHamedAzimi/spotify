@@ -7,3 +7,6 @@ drf-spectacular>=0.28,<1
 gunicorn>=23,<24
 whitenoise>=6.9,<7
 Pillow>=11,<12
+channels[daphne]>=4.2,<5
+channels-redis>=4.2,<5
+redis>=5.2,<6

@@ -11,7 +11,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User
+from .models import Playlist, PlaylistFollow, PlaylistSong, Song, User, UserFollow
 
 
 class PlaylistFollowTests(TestCase):
@@ -219,6 +219,100 @@ class ApiAuthorizationTests(TestCase):
         self.api_client.force_authenticate(user=self.owner)
         response = self.api_client.get("/api/users/search/?q=")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_user_can_follow_and_unfollow_another_user(self):
+        self.api_client.force_authenticate(user=self.owner)
+        follow_response = self.api_client.post(f"/api/users/{self.other.pk}/follow/")
+        self.assertEqual(follow_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            UserFollow.objects.filter(
+                follower=self.owner,
+                following=self.other,
+            ).exists()
+        )
+
+        duplicate_response = self.api_client.post(
+            f"/api/users/{self.other.pk}/follow/"
+        )
+        self.assertEqual(duplicate_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(UserFollow.objects.count(), 1)
+
+        unfollow_response = self.api_client.delete(
+            f"/api/users/{self.other.pk}/follow/"
+        )
+        self.assertEqual(unfollow_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(UserFollow.objects.exists())
+
+    def test_user_cannot_follow_self(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.post(f"/api/users/{self.owner.pk}/follow/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_followers_and_following_are_paginated(self):
+        UserFollow.objects.create(follower=self.owner, following=self.other)
+        self.api_client.force_authenticate(user=self.owner)
+
+        followers_response = self.api_client.get(
+            f"/api/users/{self.other.pk}/followers/?page=1&page_size=10"
+        )
+        following_response = self.api_client.get(
+            f"/api/users/{self.owner.pk}/following/?page=1&page_size=10"
+        )
+
+        self.assertEqual(followers_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(followers_response.data["count"], 1)
+        self.assertEqual(
+            followers_response.data["results"][0]["id"],
+            str(self.owner.pk),
+        )
+        self.assertEqual(following_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(following_response.data["count"], 1)
+        self.assertEqual(
+            following_response.data["results"][0]["id"],
+            str(self.other.pk),
+        )
+
+    def test_user_public_playlists_endpoint_excludes_private_playlists(self):
+        public_playlist = Playlist.objects.create(
+            owner=self.other,
+            title="Public Profile Playlist",
+            is_public=True,
+        )
+        Playlist.objects.create(
+            owner=self.other,
+            title="Private Profile Playlist",
+            is_public=False,
+        )
+        self.api_client.force_authenticate(user=self.owner)
+
+        response = self.api_client.get(
+            f"/api/users/{self.other.pk}/playlists/?page=1&page_size=10"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], str(public_playlist.pk))
+
+    def test_playlist_owner_can_change_visibility(self):
+        self.api_client.force_authenticate(user=self.owner)
+        response = self.api_client.patch(
+            f"/api/playlists/{self.playlist.pk}/visibility/",
+            {"is_public": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["is_public"])
+        self.playlist.refresh_from_db()
+        self.assertFalse(self.playlist.is_public)
+
+    def test_non_owner_cannot_change_playlist_visibility(self):
+        self.api_client.force_authenticate(user=self.other)
+        response = self.api_client.patch(
+            f"/api/playlists/{self.playlist.pk}/visibility/",
+            {"is_public": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_new_user_has_protected_liked_playlist(self):
         liked = Playlist.objects.get(owner=self.owner, is_liked=True)

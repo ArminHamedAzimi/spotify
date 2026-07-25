@@ -31,3 +31,83 @@ local Docker-backed API.
 │   └── docs/         # API integration guide and song-import notes
 └── README.md
 ```
+
+## Backend setup
+
+The backend runs entirely through Docker Compose from `backend/`. The stack
+starts Postgres, Redis, MinIO, a one-shot bucket initializer, and the Django
+ASGI app (Daphne) on port `8000`.
+
+### Prerequisites
+
+- Docker and Docker Compose v2
+- Free local ports: `8000` (API), `9000` (MinIO S3), `9001` (MinIO console)
+
+### Configure environment
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Key variables from `.env.example`:
+
+| Variable | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Django secret; replace before any shared/deployed use |
+| `DJANGO_DEBUG` | Local debug mode (`true` in the example) |
+| `DJANGO_ALLOWED_HOSTS` | Includes `localhost`, `127.0.0.1`, and `10.0.2.2` for the emulator |
+| `POSTGRES_*` | Database name, user, password, host, and port |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO root credentials |
+| `MINIO_BUCKET` | Media bucket name (`spotify-media` by default) |
+| `MINIO_ENDPOINT` | Internal S3 endpoint used by Django (`http://minio:9000`) |
+| `MINIO_PUBLIC_ENDPOINT` | Host-reachable base URL embedded in returned media URLs |
+| `CHAT_REDIS_URL` | Redis URL for Channels / live chat |
+
+For Android Emulator clients, keep or set:
+
+```bash
+MINIO_PUBLIC_ENDPOINT=http://10.0.2.2:9000
+```
+
+`localhost` inside the emulator is the emulator itself, so media URLs must use
+`10.0.2.2` (the host machine alias). A physical device needs your computer's
+LAN IP or a public HTTPS media host instead.
+
+### Start the stack
+
+```bash
+cd backend
+docker compose up --build
+```
+
+On startup the `web` entrypoint applies migrations, collects static files, then
+serves `config.asgi:application` with Daphne. The `createbucket` service creates
+the MinIO bucket if needed and grants public download access so avatar/cover/
+audio URLs load without MinIO credentials.
+
+Useful commands while the stack is running:
+
+```bash
+# Follow API logs
+docker compose logs -f web
+
+# Django shell
+docker compose exec web python manage.py shell
+
+# Stop everything
+docker compose down
+```
+
+### Local URLs
+
+| Service | URL |
+| --- | --- |
+| API base | `http://localhost:8000/api/` |
+| OpenAPI schema | `http://localhost:8000/api/schema/` |
+| Swagger UI | `http://localhost:8000/api/docs/` |
+| MinIO S3 API | `http://localhost:9000` |
+| MinIO console | `http://localhost:9001` |
+
+Compose services: `db` (Postgres 17), `redis`, `minio`, `createbucket`, and
+`web`. Persistent volumes keep Postgres, Redis, and MinIO data across restarts.

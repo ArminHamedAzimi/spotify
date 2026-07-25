@@ -359,6 +359,32 @@ Returns active public user profiles that follow `{user_id}`. The response uses
 the standard `count`, `next`, `previous`, and `results` pagination envelope.
 Results are stably ordered by name then UUID. Page size is capped at 100.
 
+The endpoint requires JWT authentication. Results intentionally expose only
+public-safe profile fields; email addresses, password data, and premium
+expiration timestamps are not returned.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Ada",
+      "avatar_url": "https://example.com/avatars/ada.jpg",
+      "has_active_premium": false
+    }
+  ]
+}
+```
+
+No followers returns `count: 0` and `results: []`. An inactive or unknown
+`{user_id}` returns `404 Not Found`. Missing or invalid JWT authentication
+returns `401 Unauthorized`.
+
 ### 4.6 List users somebody follows
 
 ```http
@@ -367,6 +393,29 @@ GET /api/users/{user_id}/following/?page=1&page_size=10
 
 Returns active public profiles followed by `{user_id}`, using the same
 pagination envelope and public profile format as the followers endpoint.
+Results are stably ordered by name then UUID. Page size is capped at 100.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "f3ca373e-c936-4c7c-b649-f915e72e6a85",
+      "name": "Aurora",
+      "avatar_url": "https://example.com/avatars/aurora.jpg",
+      "has_active_premium": true
+    }
+  ]
+}
+```
+
+Nobody followed returns `count: 0` and `results: []`. An inactive or unknown
+`{user_id}` returns `404 Not Found`. Missing or invalid JWT authentication
+returns `401 Unauthorized`.
 
 ### 4.7 List somebody else's public playlists
 
@@ -378,7 +427,44 @@ Returns only public playlists owned by the specified active user. Private
 playlists and Liked Songs are excluded. Results use stable newest-first
 ordering and the standard pagination envelope. Each result includes
 `song_count`, so Android does not need to download the songs page merely to
-show its size.
+show its size. Page size is capped at 100.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "f11581a5-a501-427c-b2bd-abbca759097f",
+      "owner": {
+        "id": "f3ca373e-c936-4c7c-b649-f915e72e6a85",
+        "name": "Aurora",
+        "email": "aurora@example.com",
+        "premium_expires_at": "2026-08-23T17:30:00Z",
+        "has_active_premium": true,
+        "avatar_url": "https://example.com/avatars/aurora.jpg",
+        "created_at": "2026-07-23T17:30:00Z",
+        "updated_at": "2026-07-23T17:30:00Z"
+      },
+      "title": "Morning Mix",
+      "description": "Music for the morning commute",
+      "is_public": true,
+      "is_liked": false,
+      "song_count": 28,
+      "follower_count": 12,
+      "created_at": "2026-07-23T18:00:00Z",
+      "updated_at": "2026-07-23T18:00:00Z"
+    }
+  ]
+}
+```
+
+No public playlists returns `count: 0` and `results: []`. An inactive or
+unknown `{user_id}` returns `404 Not Found`. Missing or invalid JWT
+authentication returns `401 Unauthorized`.
 
 ### 4.8 Get the top-followed artists
 
@@ -1337,6 +1423,7 @@ Request`:
     "The current song is not in this playlist."
   ]
 }
+```
 
 ## 7. Playlist-follow APIs
 
@@ -1366,7 +1453,24 @@ GET /api/playlist-follows/
 ```
 
 Regular users receive only their own follows. Staff receive all follows.
-Response — `200 OK`: an array of follow objects.
+This list endpoint is not paginated.
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "id": "62481fc6-867b-4100-a75e-b784b31a45f3",
+    "user": "f3ca373e-c936-4c7c-b649-f915e72e6a85",
+    "playlist": "f11581a5-a501-427c-b2bd-abbca759097f",
+    "created_at": "2026-07-23T18:10:00Z",
+    "updated_at": "2026-07-23T18:10:00Z"
+  }
+]
+```
+
+No follows returns `[]`. Missing or invalid JWT authentication returns
+`401 Unauthorized`.
 
 ### 7.2 Create a follow
 
@@ -1382,7 +1486,21 @@ Request:
 }
 ```
 
-Response — `201 Created`: the complete follow object.
+The authenticated JWT user becomes `user`. Response — `201 Created`: the
+complete follow object using the [Follow JSON format](#follow-json-format).
+
+Validation failures return `400 Bad Request`, for example when following your
+own playlist, a private playlist, or a playlist that is already followed:
+
+```json
+{
+  "playlist": [
+    "You cannot follow your own playlist."
+  ]
+}
+```
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
 
 ### 7.3 Get one follow
 
@@ -1390,8 +1508,14 @@ Response — `201 Created`: the complete follow object.
 GET /api/playlist-follows/{id}/
 ```
 
-`{id}` is the follow-record UUID, not the playlist UUID.
-Response — `200 OK`: one follow object.
+`{id}` is the follow-record UUID, not the playlist UUID. Regular users can
+retrieve only their own follow records; staff can retrieve any follow.
+
+Response — `200 OK`: one follow object using the
+[Follow JSON format](#follow-json-format).
+
+An unknown or inaccessible follow returns `404 Not Found`. Missing or invalid
+JWT authentication returns `401 Unauthorized`.
 
 ### 7.4 Replace a follow
 
@@ -1408,7 +1532,11 @@ Request:
 ```
 
 This changes which public playlist is followed but never changes the follower.
-Response — `200 OK`: the updated follow.
+Response — `200 OK`: the updated follow using the
+[Follow JSON format](#follow-json-format).
+
+The same playlist validation rules as create apply. Missing or invalid JWT
+authentication returns `401 Unauthorized`.
 
 ### 7.5 Partially update a follow
 
@@ -1424,7 +1552,10 @@ Request:
 }
 ```
 
-Response — `200 OK`: the updated follow.
+Response — `200 OK`: the updated follow using the
+[Follow JSON format](#follow-json-format).
+
+Missing or invalid JWT authentication returns `401 Unauthorized`.
 
 ### 7.6 Delete/unfollow
 
@@ -1432,7 +1563,12 @@ Response — `200 OK`: the updated follow.
 DELETE /api/playlist-follows/{id}/
 ```
 
-No JSON body. Success returns `204 No Content`.
+`{id}` is the follow-record UUID. Only the follow owner or staff can delete it.
+There is no request JSON body. Success returns `204 No Content` with an empty
+response body.
+
+An unknown or inaccessible follow returns `404 Not Found`. Missing or invalid
+JWT authentication returns `401 Unauthorized`.
 
 ## 8. Real-time direct chat
 
@@ -1673,12 +1809,53 @@ Authorization: Bearer <access-jwt>
 Returns complete message objects in newest-first stable order using `count`,
 `next`, `previous`, and `results`. Page size is capped at 100. Fetching history
 marks incoming undelivered messages as delivered and notifies a connected
-sender in real time.
+sender in real time. If no conversation exists yet, the server creates an empty
+one before returning an empty `results` array.
+
+REST message objects use a `conversation` UUID field. WebSocket
+`message.created` payloads use `conversation_id` for the same value.
+
+Response — `200 OK`:
+
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "message-uuid",
+      "conversation": "conversation-uuid",
+      "client_message_id": "52fcf210-a111-4c2e-bb50-98f38de0ad40",
+      "sender": {
+        "id": "sender-uuid",
+        "name": "Sender",
+        "avatar_url": "https://example.com/sender.jpg",
+        "has_active_premium": false
+      },
+      "message_type": "text",
+      "body": "Hello",
+      "song": null,
+      "status": "delivered",
+      "delivered_at": "2026-07-24T20:30:02Z",
+      "read_at": null,
+      "created_at": "2026-07-24T20:30:00Z"
+    }
+  ]
+}
+```
+
+A song message includes a mini-card `song` object instead of `null`, matching
+the shape shown in [8.3 Send/share a song](#83-sendshare-a-song).
 
 This endpoint is for initial load, reconnect synchronization, and Paging 3—not
 live polling. Android should upsert `results` into its Room database. Socket
 `message.created` and `message.receipt` events should update the same Room
 rows. This preserves chat history when internet connectivity is lost.
+
+Requesting your own `{other_user_id}` returns `400 Bad Request`. An inactive or
+unknown user returns `404 Not Found`. Missing or invalid JWT authentication
+returns `401 Unauthorized`.
 
 ### 8.8 REST read fallback
 
@@ -1688,8 +1865,47 @@ Authorization: Bearer <access-jwt>
 ```
 
 There is no request body. Only the recipient can mark a message read. The
-response is the updated message, and the sender receives a real-time
-`message.receipt` event when connected.
+sender cannot mark their own message. If `delivered_at` was still null, the
+server also sets delivery before setting `read_at`.
+
+Response — `200 OK`:
+
+```json
+{
+  "id": "message-uuid",
+  "conversation": "conversation-uuid",
+  "client_message_id": "52fcf210-a111-4c2e-bb50-98f38de0ad40",
+  "sender": {
+    "id": "sender-uuid",
+    "name": "Sender",
+    "avatar_url": "https://example.com/sender.jpg",
+    "has_active_premium": false
+  },
+  "message_type": "text",
+  "body": "Hello",
+  "song": null,
+  "status": "read",
+  "delivered_at": "2026-07-24T20:30:02Z",
+  "read_at": "2026-07-24T20:30:05Z",
+  "created_at": "2026-07-24T20:30:00Z"
+}
+```
+
+The sender also receives a real-time `message.receipt` event when connected:
+
+```json
+{
+  "type": "message.receipt",
+  "message_id": "message-uuid",
+  "status": "read",
+  "delivered_at": "2026-07-24T20:30:02Z",
+  "read_at": "2026-07-24T20:30:05Z"
+}
+```
+
+Marking your own sent message returns `400 Bad Request`. An unknown message or
+a message outside the caller's conversations returns `404 Not Found`. Missing
+or invalid JWT authentication returns `401 Unauthorized`.
 
 ### 8.9 WebSocket errors
 

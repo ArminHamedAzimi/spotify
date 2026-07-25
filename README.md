@@ -111,3 +111,51 @@ docker compose down
 
 Compose services: `db` (Postgres 17), `redis`, `minio`, `createbucket`, and
 `web`. Persistent volumes keep Postgres, Redis, and MinIO data across restarts.
+
+## Android setup
+
+The Jetpack Compose client lives in `android/`. It talks to the Dockerized API
+over Retrofit and uses WebSockets for live chat.
+
+### Prerequisites
+
+- Android Studio (recent stable) with an Android Emulator or a physical device
+- Backend Compose stack already running (see [Backend setup](#backend-setup))
+
+### Run the app
+
+1. Open the `android/` directory in Android Studio.
+2. Let Gradle sync finish.
+3. Start an emulator or connect a device.
+4. Run the `app` configuration.
+
+The default API base URL is injected at build time in
+`android/app/build.gradle.kts`:
+
+```kotlin
+buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/\"")
+```
+
+`10.0.2.2` is the Android Emulator alias for the host machine where Docker
+exposes port `8000`. Do not use `localhost` for the API from the emulator.
+
+For a physical device on the same LAN, change `API_BASE_URL` to your computer's
+LAN IP, for example `http://192.168.1.20:8000/api/`, and rebuild. Keep
+`DJANGO_ALLOWED_HOSTS` and `MINIO_PUBLIC_ENDPOINT` aligned with that host.
+
+### Auth and media
+
+- Register and log in through the app; the client stores JWT access and refresh
+  tokens and attaches `Authorization: Bearer <access>` on authenticated calls.
+- Token refresh uses `POST /api/auth/token/refresh/`.
+- Avatar and song media URLs come from MinIO. With the default emulator setup,
+  those URLs should use `http://10.0.2.2:9000/...` via `MINIO_PUBLIC_ENDPOINT`.
+
+### Live chat
+
+Chat WebSocket URLs are derived from `API_BASE_URL` by switching to `ws://` /
+`wss://` and replacing the `/api/` suffix with `/ws/chat/{other_user_id}/`.
+Conversation lists and message history still use the REST chat endpoints.
+
+Endpoint contracts, request and response shapes, and WebSocket event types are
+documented in `backend/docs/API.md`.

@@ -16,12 +16,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -51,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedTextField
@@ -92,9 +94,12 @@ import com.example.android.R
 import com.example.android.playback.PlaybackConfig
 import com.example.android.playback.PlaybackUiState
 import com.example.android.data.remote.PlaylistDto
+import com.example.android.data.remote.PublicProfileDto
 import com.example.android.ui.theme.AppDimens
 import com.example.android.ui.theme.PlayerVisuals
+import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
+import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.sin
@@ -108,11 +113,14 @@ fun PlayerScreen(
     onPlaybackSpeedChange: (Float) -> Unit,
     onSleepTimerChange: (Int?) -> Unit,
     playlists: LazyPagingItems<PlaylistDto>,
+    shareFriends: LazyPagingItems<PublicProfileDto>,
+    onPrepareShareFriends: () -> Unit,
     addedMemberships: Set<Pair<String, String>>,
     loadedMemberships: Set<Pair<String, String>>,
     onLoadMemberships: (String, Collection<String>) -> Unit,
     onAddToPlaylist: (String, String) -> Unit,
     onCreatePlaylist: (String, () -> Unit) -> Unit,
+    onShareToFriend: (PublicProfileDto) -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onShuffleChange: (Boolean) -> Unit,
@@ -169,8 +177,21 @@ fun PlayerScreen(
     }
     var showSleepTimer by remember { mutableStateOf(false) }
     var showPlaylists by remember { mutableStateOf(false) }
+    var showShare by remember { mutableStateOf(false) }
     var creatingPlaylist by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
+    if (showShare) {
+        LaunchedEffect(Unit) { onPrepareShareFriends() }
+        ShareSongSheet(
+            friends = shareFriends,
+            enabled = state.mediaId != null,
+            onDismiss = { showShare = false },
+            onSelect = { friend ->
+                showShare = false
+                onShareToFriend(friend)
+            }
+        )
+    }
     if (showPlaylists) {
         val loadedPlaylistIds = playlists.itemSnapshotList.items.map(PlaylistDto::id)
         LaunchedEffect(state.mediaId, loadedPlaylistIds) {
@@ -393,7 +414,9 @@ fun PlayerScreen(
             onShuffle = {
                 onShuffleChange(!state.isShuffleEnabled)
             },
-            onAdd = { showPlaylists = true }
+            onAdd = { showPlaylists = true },
+            onShare = { showShare = true },
+            shareEnabled = state.mediaId != null
         )
         PlayerOptions(
             playbackSpeed = state.playbackSpeed,
@@ -547,7 +570,9 @@ private fun PlaybackControls(
     onPrevious: () -> Unit,
     shuffle: Boolean,
     onShuffle: () -> Unit,
-    onAdd: () -> Unit
+    onAdd: () -> Unit,
+    onShare: () -> Unit,
+    shareEnabled: Boolean
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)) {
         FilledIconButton(
@@ -569,6 +594,9 @@ private fun PlaybackControls(
         }
         IconButton(onClick = onAdd) {
             Icon(Icons.Rounded.Add, stringResource(R.string.add_to_playlist))
+        }
+        IconButton(onClick = onShare, enabled = shareEnabled) {
+            Icon(Icons.Rounded.Share, stringResource(R.string.share_song))
         }
     }
     Row(
@@ -718,6 +746,100 @@ private fun SleepTimerSheet(
                     onClick = { onSelected(minutes) },
                     label = { Text(stringResource(R.string.sleep_timer_minutes, minutes)) }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ShareSongSheet(
+    friends: LazyPagingItems<PublicProfileDto>,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (PublicProfileDto) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(AppDimens.spaceLarge),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)) {
+                    Text(
+                        text = stringResource(R.string.share_song),
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        text = stringResource(R.string.share_song_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (friends.loadState.refresh is LoadState.Loading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(AppDimens.spaceLarge),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (friends.itemCount == 0) {
+                item {
+                    Text(
+                        text = stringResource(R.string.share_no_friends),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                items(friends.itemCount, key = { friends[it]?.id ?: it }) { index ->
+                    val friend = friends[index] ?: return@items
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = enabled) { onSelect(friend) },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(AppDimens.spaceSmall),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceMedium)
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(AppDimens.miniPlayerArtworkSize),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                AsyncImage(
+                                    model = friend.avatarUrl,
+                                    contentDescription = stringResource(
+                                        R.string.artist_avatar,
+                                        friend.name
+                                    ),
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            Text(
+                                friend.name,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Icon(
+                                Icons.Rounded.Share,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
         }
     }

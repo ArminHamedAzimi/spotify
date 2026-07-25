@@ -126,9 +126,13 @@
     <string name="message">Message</string>
     <string name="start_conversation">Start a conversation</string>
     <string name="shared_song">Shared a song</string>
+    <string name="shared_song_card_label">Song</string>
     <string name="is_typing">is typing…</string>
     <string name="message_hint">Write a message</string>
     <string name="send_message">Send message</string>
+    <string name="share_song">Share song</string>
+    <string name="share_song_description">Send this song to a friend’s direct messages</string>
+    <string name="share_no_friends">Follow friends to share songs with them</string>
     <string name="share_current_song">Share current song</string>
     <string name="message_status">Message status</string>
     <string name="stop_playback">Stop playback</string>

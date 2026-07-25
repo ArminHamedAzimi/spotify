@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import coil.compose.AsyncImage
 import com.example.android.R
@@ -156,7 +155,7 @@ fun ChatScreen(
                 onClick = { currentSongId?.let(onShareSong) },
                 enabled = currentSongId != null
             ) {
-                Icon(Icons.Rounded.MusicNote, stringResource(R.string.share_current_song))
+                Icon(Icons.Rounded.Share, stringResource(R.string.share_current_song))
             }
             OutlinedTextField(
                 value = state.draft,
@@ -179,6 +178,7 @@ private fun MessageBubble(
     otherUserAvatarUrl: String?,
     onPlaySong: (Song) -> Unit
 ) {
+    val sharedSong = message.toSharedSong()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
@@ -211,52 +211,16 @@ private fun MessageBubble(
                 .padding(AppDimens.spaceMedium),
             verticalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
         ) {
-            if (message.songId != null && message.songAudioUrl != null) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onPlaySong(
-                                Song(
-                                    message.songId,
-                                    message.songTitle.orEmpty(),
-                                    message.songArtist.orEmpty(),
-                                    message.songCoverUrl.orEmpty(),
-                                    message.songAudioUrl,
-                                    message.songDuration
-                                )
-                            )
-                        },
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surface.copy(
-                        alpha = ChatVisuals.songCardSurfaceAlpha
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(AppDimens.spaceSmall),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
-                    ) {
-                        AsyncImage(
-                            model = message.songCoverUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(AppDimens.miniPlayerArtworkSize)
-                                .clip(MaterialTheme.shapes.small),
-                            contentScale = ContentScale.Crop
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                message.songTitle.orEmpty(),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                message.songArtist.orEmpty(),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Icon(Icons.Rounded.PlayArrow, null)
-                    }
-                }
+            if (sharedSong != null) {
+                SharedSongMiniCard(
+                    song = sharedSong,
+                    onPlay = { onPlaySong(sharedSong) }
+                )
+            } else if (message.messageType == "song") {
+                Text(
+                    stringResource(R.string.shared_song),
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
             if (message.body.isNotBlank()) {
                 Text(message.body, style = MaterialTheme.typography.bodyLarge)
@@ -291,6 +255,81 @@ private fun MessageBubble(
             }
         }
     }
+}
+
+@Composable
+fun SharedSongMiniCard(
+    song: Song,
+    onPlay: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onPlay),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface.copy(
+            alpha = ChatVisuals.songCardSurfaceAlpha
+        ),
+        tonalElevation = AppDimens.cardElevation
+    ) {
+        Row(
+            modifier = Modifier.padding(AppDimens.spaceSmall),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
+        ) {
+            AsyncImage(
+                model = song.coverImageUrl,
+                contentDescription = stringResource(R.string.song_cover, song.title),
+                modifier = Modifier
+                    .size(AppDimens.miniPlayerArtworkSize)
+                    .clip(MaterialTheme.shapes.small),
+                contentScale = ContentScale.Crop
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.shared_song_card_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    song.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1
+                )
+                Text(
+                    song.artistName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    Icons.Rounded.PlayArrow,
+                    contentDescription = stringResource(R.string.play),
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(AppDimens.spaceSmall)
+                )
+            }
+        }
+    }
+}
+
+private fun ChatMessageEntity.toSharedSong(): Song? {
+    val id = songId ?: return null
+    val audioUrl = songAudioUrl ?: return null
+    return Song(
+        id = id,
+        title = songTitle.orEmpty(),
+        artistName = songArtist.orEmpty(),
+        coverImageUrl = songCoverUrl.orEmpty(),
+        audioUrl = audioUrl,
+        duration = songDuration
+    )
 }
 
 private fun formatMessageTime(createdAt: String): String {

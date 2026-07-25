@@ -267,8 +267,16 @@ fun SpotifyNavGraph(
                     },
                     onDraftChange = chatViewModel::setDraft,
                     onSend = chatViewModel::send,
-                    onShareSong = chatViewModel::shareSong,
-                    onPlaySong = playbackViewModel::play
+                    onShareSong = { songId ->
+                        chatViewModel.shareSong(
+                            songId,
+                            playbackViewModel.songForId(songId)
+                        )
+                    },
+                    onPlaySong = { song ->
+                        playbackViewModel.play(song)
+                        navController.navigate(Screen.Player.route)
+                    }
                 )
             }
             composable(Screen.Downloads.route) {
@@ -387,11 +395,29 @@ fun SpotifyNavGraph(
                     onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                     onSleepTimerChange = playbackViewModel::setSleepTimer,
                     playlists = pagedPlaylists,
+                    shareFriends = connections,
+                    onPrepareShareFriends = {
+                        profileState.user?.id?.let { userId ->
+                            socialViewModel.showConnections(userId, ConnectionType.Following)
+                        }
+                    },
                     addedMemberships = playlistsState.addedMemberships,
                     loadedMemberships = playlistsState.loadedMemberships,
                     onLoadMemberships = playlistsViewModel::loadMemberships,
                     onAddToPlaylist = playlistsViewModel::addSong,
                     onCreatePlaylist = playlistsViewModel::create,
+                    onShareToFriend = { friend ->
+                        val songId = playbackState.mediaId ?: return@PlayerScreen
+                        chatViewModel.openAndShareSong(
+                            friend,
+                            songId,
+                            playbackViewModel.songForId(songId)
+                        )
+                        navController.navigate(Screen.Chat.route) {
+                            popUpTo(Screen.Player.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
                     onNext = playbackViewModel::next,
                     onPrevious = playbackViewModel::previous,
                     onShuffleChange = playbackViewModel::setShuffle,

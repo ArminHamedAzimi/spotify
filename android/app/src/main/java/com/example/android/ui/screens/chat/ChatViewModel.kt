@@ -7,10 +7,12 @@ import androidx.paging.PagingData
 import com.example.android.data.chat.ChatMessageEntity
 import com.example.android.data.chat.ChatRepository
 import com.example.android.data.remote.PublicProfileDto
+import com.example.android.domain.home.Song
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 data class ChatUiState(
     val otherUser: PublicProfileDto? = null,
@@ -32,6 +34,7 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
     private var messagesJob: Job? = null
     private var typingJob: Job? = null
     private val readMessageIds = mutableSetOf<String>()
+    private var pendingShare: PendingSongShare? = null
 
     init {
         viewModelScope.launch {
@@ -39,6 +42,7 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
                 typing to connected
             }.collect { (typing, connected) ->
                 _state.update { it.copy(isTyping = typing, connected = connected) }
+                if (connected) flushPendingShare()
             }
         }
     }
@@ -49,6 +53,7 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
         messagesJob?.cancel()
         typingJob?.cancel()
         readMessageIds.clear()
+        pendingShare = null
         activeUserId.value = userId
         _state.value = ChatUiState(currentUserId = userId)
     }
@@ -71,6 +76,13 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
         }
     }
 
+    fun openAndShareSong(profile: PublicProfileDto, songId: String, preview: Song? = null) {
+        if (_state.value.currentUserId == null) return
+        pendingShare = PendingSongShare(songId, preview)
+        open(profile)
+        flushPendingShare()
+    }
+
     fun setDraft(value: String) {
         _state.update { it.copy(draft = value) }
         repository.setTyping(value.isNotBlank())
@@ -89,19 +101,38 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
         _state.update { it.copy(draft = "") }
     }
 
-    fun shareSong(songId: String) = repository.sendSong(songId)
+    fun shareSong(songId: String, preview: Song? = null) {
+        if (_state.value.otherUser == null) return
+        pendingShare = PendingSongShare(songId, preview)
+        flushPendingShare()
+    }
 
     fun close() {
         repository.setTyping(false)
         repository.disconnect()
         repository.refreshConversations()
         messagesJob?.cancel()
+        pendingShare = null
     }
 
     override fun onCleared() {
         close()
         super.onCleared()
     }
+
+    private fun flushPendingShare() {
+        val share = pendingShare ?: return
+        if (!repository.isConnected()) return
+        if (repository.sendSong(share.songId, share.preview, clientMessageId = share.clientMessageId)) {
+            pendingShare = null
+        }
+    }
+
+    private data class PendingSongShare(
+        val songId: String,
+        val preview: Song?,
+        val clientMessageId: String = UUID.randomUUID().toString()
+    )
 
     private companion object {
         const val TYPING_IDLE_MILLIS = 1_200L

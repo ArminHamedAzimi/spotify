@@ -108,6 +108,9 @@ class PlaybackViewModel(
         selectSong(song, PlaybackSource.General())
     }
 
+    fun songForId(songId: String): Song? =
+        currentSong?.takeIf { it.id == songId }
+
     fun playFromPlaylist(song: Song, playlistId: String, shuffle: Boolean) {
         selectSong(song, PlaybackSource.Playlist(playlistId, shuffle))
     }

@@ -159,3 +159,12 @@ Conversation lists and message history still use the REST chat endpoints.
 
 Endpoint contracts, request and response shapes, and WebSocket event types are
 documented in `backend/docs/API.md`.
+
+## Documentation
+
+- [backend/docs/API.md](backend/docs/API.md) — full HTTP and WebSocket integration
+  guide for the Android client (auth, users, songs, playlists, follows, chat,
+  errors, and MinIO media URLs)
+- [backend/docs/SONG_IMPORT.md](backend/docs/SONG_IMPORT.md) — import local audio
+  and covers into MinIO and create Django `Song` rows with the
+  `import_songs` management command

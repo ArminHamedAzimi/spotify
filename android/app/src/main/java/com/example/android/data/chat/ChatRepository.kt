@@ -96,7 +96,7 @@ class ChatRepository(
         if (trimmed.isEmpty()) return
         val clientId = UUID.randomUUID().toString()
         scope.launch {
-            dao.upsert(
+            dao.insertOptimistic(
                 ChatMessageEntity(
                     sender, clientId, null, target, sender, "", "text", trimmed,
                     "sending", now(), null, null, null, null, null, null
@@ -113,17 +113,37 @@ class ChatRepository(
         )
     }
 
-    fun sendSong(songId: String, body: String = "") {
-        send(
+    fun sendSong(
+        songId: String,
+        preview: Song? = null,
+        body: String = "",
+        clientMessageId: String = UUID.randomUUID().toString()
+    ): Boolean {
+        val target = otherUserId ?: return false
+        val sender = currentUserId ?: return false
+        if (preview != null) {
+            scope.launch {
+                dao.insertOptimistic(
+                    ChatMessageEntity(
+                        sender, clientMessageId, null, target, sender, "", "song", body,
+                        "sending", now(), preview.id, preview.title, preview.artistName,
+                        preview.coverImageUrl, preview.audioUrl, preview.duration
+                    )
+                )
+            }
+        }
+        return send(
             mapOf(
                 "type" to "message.send",
-                "client_message_id" to UUID.randomUUID().toString(),
+                "client_message_id" to clientMessageId,
                 "message_type" to "song",
                 "song_id" to songId,
                 "body" to body
             )
         )
     }
+
+    fun isConnected(): Boolean = connected.value
 
     fun setTyping(typing: Boolean) = send(mapOf("type" to "typing", "is_typing" to typing))
 
@@ -141,20 +161,25 @@ class ChatRepository(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (socket != webSocket) return
             _connected.value = true
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (socket != webSocket) return
             val event = runCatching { gson.fromJson(text, JsonObject::class.java) }.getOrNull()
                 ?: return
             when (event["type"]?.asString) {
                 "message.created" -> {
-                    val message = gson.fromJson(event["message"], ChatMessageDto::class.java)
+                    val message = runCatching {
+                        gson.fromJson(event.get("message"), ChatMessageDto::class.java)
+                    }.getOrNull() ?: return
                     val target = otherUserId ?: return
                     val owner = currentUserId ?: return
                     scope.launch {
                         dao.upsert(message.toEntity(owner, target))
                         if (message.sender.id != currentUserId) markRead(message.id)
+                        refreshConversations()
                     }
                 }
                 "message.receipt" -> {
@@ -175,6 +200,7 @@ class ChatRepository(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (socket != webSocket) return
             socket = null
             _connected.value = false
             _isTyping.value = false
@@ -182,6 +208,7 @@ class ChatRepository(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (socket != webSocket) return
             socket = null
             _connected.value = false
             _isTyping.value = false

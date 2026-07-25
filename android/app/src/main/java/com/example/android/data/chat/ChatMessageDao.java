@@ -19,6 +19,10 @@ public interface ChatMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void upsert(ChatMessageEntity message);
 
+    /** Skips if a server-confirmed row for this client id already exists. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    void insertOptimistic(ChatMessageEntity message);
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void upsertAll(List<ChatMessageEntity> messages);
 

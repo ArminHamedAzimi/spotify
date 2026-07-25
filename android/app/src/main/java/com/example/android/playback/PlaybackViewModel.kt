@@ -1,34 +1,9 @@
 package com.example.android.playback
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
 import android.app.Application
-import android.content.ComponentName
-import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import com.example.android.domain.home.Song
-import com.example.android.data.downloads.DownloadRepository
-import com.example.android.data.playlists.PlaylistRepository
-import com.google.common.util.concurrent.ListenableFuture
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
 data class PlaybackUiState(
     val isConnected: Boolean = false,
@@ -48,318 +23,41 @@ data class PlaybackUiState(
     val hasMedia: Boolean get() = mediaId != null
 }
 
+/**
+ * UI-facing façade over the process-scoped [PlaybackController].
+ * Keeps Compose / ViewModel wiring unchanged while notification actions stay alive.
+ */
 class PlaybackViewModel(
     application: Application,
-    private val downloads: DownloadRepository,
-    private val playlists: PlaylistRepository
+    private val playback: PlaybackController
 ) : AndroidViewModel(application) {
-    private val controllerFuture: ListenableFuture<MediaController>
-    private var controller: MediaController? = null
-    private var progressJob: Job? = null
-    private var sleepTimerJob: Job? = null
-    private var selectedSleepTimerMinutes: Int? = null
-    private var activeUserId: String? = null
-    private var currentSong: Song? = null
-    private val history = ArrayDeque<Song>()
-    private val _recentlyPlayed = MutableStateFlow<List<Song>>(emptyList())
-    val recentlyPlayed: StateFlow<List<Song>> = _recentlyPlayed.asStateFlow()
-    private var source: PlaybackSource = PlaybackSource.General()
-    private var advancing = false
+    val uiState: StateFlow<PlaybackUiState> = playback.uiState
+    val recentlyPlayed: StateFlow<List<Song>> = playback.recentlyPlayed
 
-    private val _uiState = MutableStateFlow(PlaybackUiState())
-    val uiState: StateFlow<PlaybackUiState> = _uiState.asStateFlow()
+    fun play(song: Song) = playback.play(song)
 
-    private val listener = object : Player.Listener {
-        override fun onEvents(player: Player, events: Player.Events) {
-            updateState(player)
-            if (player.playbackState == Player.STATE_ENDED && !advancing) next()
-        }
-    }
+    fun playFromPlaylist(song: Song, playlistId: String, shuffle: Boolean) =
+        playback.playFromPlaylist(song, playlistId, shuffle)
 
-    init {
-        viewModelScope.launch {
-            PlaybackCommandBus.commands.collect { command ->
-                when (command) {
-                    PlaybackCommand.Previous -> previous()
-                    PlaybackCommand.Next -> next()
-                    PlaybackCommand.Stop -> resetStoppedPlayback()
-                }
-            }
-        }
-        val token = SessionToken(
-            application,
-            ComponentName(application, PlaybackService::class.java)
-        )
-        controllerFuture = MediaController.Builder(application, token).buildAsync()
-        controllerFuture.addListener(
-            {
-                runCatching { controllerFuture.get() }.getOrNull()?.let { connectedController ->
-                    controller = connectedController
-                    connectedController.addListener(listener)
-                    updateState(connectedController)
-                    startProgressUpdates()
-                }
-            },
-            ContextCompat.getMainExecutor(application)
-        )
-    }
+    fun startPlaylist(playlistId: String, shuffle: Boolean) =
+        playback.startPlaylist(playlistId, shuffle)
 
-    fun play(song: Song) {
-        selectSong(song, PlaybackSource.General())
-    }
+    fun playFromDownloads(song: Song, songs: List<Song>) =
+        playback.playFromDownloads(song, songs)
 
-    fun playFromPlaylist(song: Song, playlistId: String, shuffle: Boolean) {
-        selectSong(song, PlaybackSource.Playlist(playlistId, shuffle))
-    }
+    fun next() = playback.next()
 
-    fun startPlaylist(playlistId: String, shuffle: Boolean) {
-        viewModelScope.launch {
-            runCatching { playlists.playlistNext(playlistId, null, shuffle) }
-                .onSuccess { selectSong(it, PlaybackSource.Playlist(playlistId, shuffle)) }
-                .onFailure { Log.e(PLAYBACK_LOG_TAG, "Unable to start playlist", it) }
-        }
-    }
+    fun previous() = playback.previous()
 
-    fun playFromDownloads(song: Song, songs: List<Song>) {
-        selectSong(song, PlaybackSource.Downloads(songs))
-    }
+    fun setShuffle(enabled: Boolean) = playback.setShuffle(enabled)
 
-    private fun selectSong(song: Song, newSource: PlaybackSource, recordHistory: Boolean = true) {
-        if (recordHistory) currentSong?.let(history::addLast)
-        _recentlyPlayed.update { songs ->
-            (listOf(song) + songs.filterNot { it.id == song.id })
-                .take(RECENTLY_PLAYED_LIMIT)
-        }
-        currentSong = song
-        source = newSource
-        _uiState.update {
-            it.copy(isShuffleEnabled = newSource.shuffle)
-        }
-        val activeController = controller ?: return
-        val playableSong = downloads.resolve(song, activeUserId)
-        viewModelScope.launch {
-            try {
-                if (
-                    activeController.currentMediaItem?.mediaId == playableSong.id &&
-                    activeController.currentMediaItem?.localConfiguration?.uri?.toString() ==
-                    playableSong.audioUrl
-                ) {
-                    if (activeController.playbackState == Player.STATE_ENDED) {
-                        activeController.seekToDefaultPosition()
-                    }
-                    activeController.play()
-                    return@launch
-                }
-                if (activeController.currentMediaItem != null) {
-                    animateVolume(
-                        activeController,
-                        activeController.volume,
-                        PlaybackConfig.silentVolume
-                    )
-                }
-                activeController.setMediaItem(playableSong.toMediaItem())
-                activeController.prepare()
-                activeController.volume = PlaybackConfig.silentVolume
-                activeController.play()
-                animateVolume(
-                    activeController,
-                    PlaybackConfig.silentVolume,
-                    PlaybackConfig.fullVolume
-                )
-            } catch (error: Exception) {
-                activeController.volume = PlaybackConfig.fullVolume
-                Log.e(PLAYBACK_LOG_TAG, "Unable to start selected song", error)
-                updateState(activeController)
-            }
-        }
-    }
+    fun setActiveUser(userId: String?) = playback.setActiveUser(userId)
 
-    fun next() {
-        val current = currentSong ?: return
-        if (advancing) return
-        advancing = true
-        viewModelScope.launch {
-            try {
-                val next = when (val activeSource = source) {
-                    is PlaybackSource.Playlist -> playlists.playlistNext(
-                        activeSource.id, current.id, activeSource.shuffle
-                    )
-                    is PlaybackSource.Downloads -> {
-                        if (activeSource.shuffle) {
-                            activeSource.songs.filterNot { it.id == current.id }.randomOrNull()
-                                ?: activeSource.songs.firstOrNull()
-                        } else {
-                            val index = activeSource.songs.indexOfFirst { it.id == current.id }
-                            activeSource.songs.getOrNull(index + 1)
-                                ?: activeSource.songs.firstOrNull()
-                        }
-                    }
-                    is PlaybackSource.General -> playlists.randomNext(current.id)
-                }
-                next?.let { selectSong(it, source) }
-            } catch (error: Exception) {
-                Log.e(PLAYBACK_LOG_TAG, "Unable to load next song", error)
-            } finally {
-                advancing = false
-            }
-        }
-    }
+    fun togglePlayPause() = playback.togglePlayPause()
 
-    fun previous() {
-        val previous = history.removeLastOrNull() ?: return
-        selectSong(previous, source, recordHistory = false)
-    }
+    fun seekTo(positionMillis: Long) = playback.seekTo(positionMillis)
 
-    private fun resetStoppedPlayback() {
-        currentSong = null
-        history.clear()
-        controller?.stop()
-        controller?.clearMediaItems()
-    }
+    fun setPlaybackSpeed(speed: Float) = playback.setPlaybackSpeed(speed)
 
-    fun setShuffle(enabled: Boolean) {
-        source = when (val active = source) {
-            is PlaybackSource.Playlist -> active.copy(shuffle = enabled)
-            is PlaybackSource.Downloads -> active.copy(shuffle = enabled)
-            is PlaybackSource.General -> active.copy(shuffle = enabled)
-        }
-        _uiState.update {
-            it.copy(isShuffleEnabled = source.shuffle)
-        }
-    }
-
-    fun setActiveUser(userId: String?) {
-        if (activeUserId != userId) {
-            val currentUri = controller?.currentMediaItem
-                ?.localConfiguration
-                ?.uri
-            if (currentUri?.scheme == android.content.ContentResolver.SCHEME_FILE) {
-                controller?.stop()
-                controller?.clearMediaItems()
-            }
-        }
-        activeUserId = userId
-    }
-
-    fun togglePlayPause() {
-        controller?.let { player ->
-            if (player.isPlaying) {
-                player.pause()
-            } else {
-                if (player.playbackState == Player.STATE_ENDED) {
-                    player.seekToDefaultPosition()
-                }
-                player.play()
-            }
-        }
-    }
-
-    fun seekTo(positionMillis: Long) {
-        controller?.seekTo(positionMillis)
-    }
-
-    fun setPlaybackSpeed(speed: Float) {
-        if (speed !in PlaybackConfig.playbackSpeeds) return
-        controller?.setPlaybackSpeed(speed)
-        _uiState.update { it.copy(playbackSpeed = speed) }
-    }
-
-    fun setSleepTimer(minutes: Int?) {
-        if (minutes != null && minutes !in PlaybackConfig.sleepTimerMinutes) return
-        sleepTimerJob?.cancel()
-        selectedSleepTimerMinutes = minutes
-        _uiState.update { it.copy(sleepTimerMinutes = minutes) }
-        if (minutes == null) return
-        sleepTimerJob = viewModelScope.launch {
-            delay(minutes * PlaybackConfig.millisPerMinute)
-            controller?.pause()
-            selectedSleepTimerMinutes = null
-            _uiState.update { it.copy(sleepTimerMinutes = null) }
-        }
-    }
-
-    override fun onCleared() {
-        progressJob?.cancel()
-        sleepTimerJob?.cancel()
-        controller?.removeListener(listener)
-        MediaController.releaseFuture(controllerFuture)
-        controller = null
-        super.onCleared()
-    }
-
-    private fun Song.toMediaItem(): MediaItem {
-        return MediaItem.Builder()
-            .setMediaId(id)
-            .setUri(audioUrl)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(artistName)
-                    .setArtworkUri(android.net.Uri.parse(coverImageUrl))
-                    .build()
-            )
-            .build()
-    }
-
-    private fun updateState(player: Player) {
-        val metadata = player.mediaMetadata
-        val duration = player.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: 0L
-        _uiState.value = PlaybackUiState(
-            isConnected = true,
-            mediaId = player.currentMediaItem?.mediaId,
-            title = metadata.title?.toString().orEmpty(),
-            artist = metadata.artist?.toString().orEmpty(),
-            artworkUrl = metadata.artworkUri?.toString(),
-            audioUrl = player.currentMediaItem?.localConfiguration?.uri?.toString(),
-            isPlaying = player.isPlaying,
-            isBuffering = player.playbackState == Player.STATE_BUFFERING,
-            positionMillis = player.currentPosition.coerceAtLeast(0L),
-            durationMillis = duration,
-            playbackSpeed = player.playbackParameters.speed,
-            sleepTimerMinutes = selectedSleepTimerMinutes,
-            isShuffleEnabled = source.shuffle
-        )
-    }
-
-    private fun startProgressUpdates() {
-        progressJob?.cancel()
-        progressJob = viewModelScope.launch {
-            while (isActive) {
-                controller?.let(::updateState)
-                delay(PlaybackConfig.progressUpdateMillis)
-            }
-        }
-    }
-
-    private suspend fun animateVolume(
-        player: Player,
-        from: Float,
-        to: Float
-    ) = suspendCancellableCoroutine { continuation ->
-        val animator = ValueAnimator.ofFloat(from, to).apply {
-            duration = PlaybackConfig.fadeDurationMillis
-            addUpdateListener { player.volume = it.animatedValue as Float }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    if (continuation.isActive) continuation.resume(Unit)
-                }
-            })
-            start()
-        }
-        continuation.invokeOnCancellation { animator.cancel() }
-    }
-}
-
-private const val PLAYBACK_LOG_TAG = "PlaybackViewModel"
-private const val RECENTLY_PLAYED_LIMIT = 50
-
-private sealed interface PlaybackSource {
-    val shuffle: Boolean
-
-    data class General(override val shuffle: Boolean = false) : PlaybackSource
-    data class Playlist(val id: String, override val shuffle: Boolean) : PlaybackSource
-    data class Downloads(
-        val songs: List<Song>,
-        override val shuffle: Boolean = false
-    ) : PlaybackSource
+    fun setSleepTimer(minutes: Int?) = playback.setSleepTimer(minutes)
 }

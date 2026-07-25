@@ -10,6 +10,7 @@ import com.example.android.domain.home.GetRecentSongsUseCase
 import com.example.android.domain.home.HomeRepository
 import com.example.android.ui.screens.home.HomeViewModel
 import com.example.android.ui.screens.profile.ProfileViewModel
+import com.example.android.playback.PlaybackController
 import com.example.android.playback.PlaybackViewModel
 import com.example.android.data.downloads.DownloadRepository
 import com.example.android.ui.screens.downloads.DownloadsViewModel
@@ -70,7 +71,14 @@ val appModule = module {
     factory { GetRecentSongsUseCase(get()) }
     viewModel { ProfileViewModel(androidContext() as android.app.Application, get()) }
     viewModel { HomeViewModel(get<HomeRepository>()) }
-    viewModel { PlaybackViewModel(androidContext() as android.app.Application, get(), get()) }
+    single {
+        PlaybackController(
+            androidContext() as android.app.Application,
+            get(),
+            get()
+        )
+    }
+    viewModel { PlaybackViewModel(androidContext() as android.app.Application, get()) }
     viewModel { DownloadsViewModel(get()) }
     viewModel { PlaylistsViewModel(get()) }
     viewModel { SearchViewModel(get()) }

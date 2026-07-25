@@ -98,9 +98,12 @@ import androidx.paging.compose.LazyPagingItems
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.sin
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 fun PlayerScreen(
     state: PlaybackUiState,
     onTogglePlayPause: () -> Unit,
@@ -120,7 +123,9 @@ fun PlayerScreen(
     isDownloading: Boolean,
     @StringRes downloadMessageRes: Int?,
     onDownload: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val fallbackPrimary = MaterialTheme.colorScheme.primaryContainer
     val context = LocalContext.current
@@ -369,7 +374,9 @@ fun PlayerScreen(
             )
         }
         RotatingDisc(
-            state = state
+            state = state,
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -409,8 +416,11 @@ fun PlayerScreen(
 }
 
 @Composable
+@OptIn(ExperimentalSharedTransitionApi::class)
 private fun RotatingDisc(
-    state: PlaybackUiState
+    state: PlaybackUiState,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val rotation = remember { Animatable(0f) }
     LaunchedEffect(state.mediaId) { rotation.snapTo(0f) }
@@ -435,25 +445,31 @@ private fun RotatingDisc(
         tonalElevation = AppDimens.cardElevation
     ) {
         Box(contentAlignment = Alignment.Center) {
-            SubcomposeAsyncImage(
-                model = state.artworkUrl,
-                contentDescription = stringResource(R.string.song_cover, state.title),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(AppDimens.playerDiscCoverSize)
-                    .graphicsLayer { shape = CircleShape; clip = true }
-            ) {
-                val success = painter.state as? coil.compose.AsyncImagePainter.State.Success
-                if (success != null) {
-                    SubcomposeAsyncImageContent()
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Rounded.MusicNote,
-                            contentDescription = null,
-                            modifier = Modifier.size(AppDimens.emptyStateIconSize),
-                            tint = MaterialTheme.colorScheme.primary
+            with(sharedTransitionScope) {
+                SubcomposeAsyncImage(
+                    model = state.artworkUrl,
+                    contentDescription = stringResource(R.string.song_cover, state.title),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(AppDimens.playerDiscCoverSize)
+                        .sharedElement(
+                            state = rememberSharedContentState(key = "song-artwork-${state.mediaId}"),
+                            animatedVisibilityScope = animatedVisibilityScope
                         )
+                        .graphicsLayer { shape = CircleShape; clip = true }
+                ) {
+                    val success = painter.state as? coil.compose.AsyncImagePainter.State.Success
+                    if (success != null) {
+                        SubcomposeAsyncImageContent()
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(AppDimens.emptyStateIconSize),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
@@ -466,7 +482,6 @@ private fun RotatingDisc(
         }
     }
 }
-
 @Composable
 private fun AudioVisualizer(isPlaying: Boolean) {
     val transition = rememberInfiniteTransition(label = "audioVisualizer")

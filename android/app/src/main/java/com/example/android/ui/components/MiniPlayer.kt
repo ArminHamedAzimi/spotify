@@ -35,12 +35,18 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.R
 import com.example.android.playback.PlaybackUiState
 import com.example.android.ui.theme.AppDimens
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MiniPlayer(
     state: PlaybackUiState,
     onOpenPlayer: () -> Unit,
-    onTogglePlayPause: () -> Unit
+    onTogglePlayPause: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val swipeThreshold = with(LocalDensity.current) {
         AppDimens.playerSwipeThreshold.toPx()
@@ -84,18 +90,24 @@ fun MiniPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.spaceSmall)
             ) {
-                SubcomposeAsyncImage(
-                    model = state.artworkUrl,
-                    contentDescription = stringResource(R.string.song_cover, state.title),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(AppDimens.miniPlayerArtworkSize)
-                        .clip(CircleShape)
-                ) {
-                    if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
-                        SubcomposeAsyncImageContent()
-                    } else {
-                        Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                with(sharedTransitionScope) {
+                    SubcomposeAsyncImage(
+                        model = state.artworkUrl,
+                        contentDescription = stringResource(R.string.song_cover, state.title),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(AppDimens.miniPlayerArtworkSize)
+                            .sharedElement(
+                                state = rememberSharedContentState(key = "song-artwork-${state.mediaId}"),
+                                animatedVisibilityScope = animatedVisibilityScope
+                            )
+                            .clip(CircleShape)
+                    ) {
+                        if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
+                            SubcomposeAsyncImageContent()
+                        } else {
+                            Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                        }
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {

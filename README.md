@@ -168,3 +168,34 @@ documented in `backend/docs/API.md`.
 - [backend/docs/SONG_IMPORT.md](backend/docs/SONG_IMPORT.md) — import local audio
   and covers into MinIO and create Django `Song` rows with the
   `import_songs` management command
+
+## Testing
+
+### Backend
+
+With the Compose stack running from `backend/`, run the Django test suite inside
+the `web` container. Prefer the in-memory test settings so tests do not touch
+Postgres or MinIO:
+
+```bash
+cd backend
+docker compose exec web python manage.py test --settings=config.settings_test
+```
+
+`config.settings_test` uses SQLite in memory, an in-memory file storage backend,
+a fast password hasher, and an in-memory Channels layer. Coverage includes API
+views, chat, and the `import_songs` management command under `backend/spotify/`.
+
+### Android
+
+Unit tests live under `android/app/src/test/`. Instrumented tests live under
+`android/app/src/androidTest/`. Run them from Android Studio's test runners or
+with Gradle from `android/`:
+
+```bash
+cd android
+./gradlew test
+./gradlew connectedAndroidTest
+```
+
+`connectedAndroidTest` requires a running emulator or attached device.

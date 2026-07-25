@@ -73,7 +73,16 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.example.android.playback.PlaybackViewModel
 import com.example.android.ui.theme.PlayerVisuals
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun SpotifyNavGraph(
     themeMode: ThemeMode,
@@ -118,6 +127,8 @@ fun SpotifyNavGraph(
             playlistsViewModel.refresh()
         }
     }
+    var isPlayerExpanded by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = isPlayerExpanded) { isPlayerExpanded = false }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Home.route
     val isMainDestination = bottomNavItems.any { it.route == currentRoute }
@@ -131,73 +142,115 @@ fun SpotifyNavGraph(
         isMainDestination || isPlaylistDetail || isSocialDestination ||
             isChatDestination || isRecentlyPlayed
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            if (
-                currentRoute != Screen.Player.route && !isPlaylistDetail &&
-                !isSocialDestination && !isChatDestination && !isRecentlyPlayed
-            ) {
-                AppTopBar(
-                    isMainDestination = isMainDestination,
-                    titleRes = when (currentRoute) {
-                        Screen.Notifications.route -> Screen.Notifications.titleRes
-                        Screen.Settings.route -> Screen.Settings.titleRes
-                        else -> null
-                    },
-                    onBackClick = { navController.popBackStack() },
-                    onMessagesClick = { navController.navigate(Screen.Conversations.route) },
-                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                    onSettingsClick = { navController.navigate(Screen.Settings.route) }
-                )
-            }
-        },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = showAppBottomBar,
-                enter = fadeIn(
-                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
-                ),
-                exit = fadeOut(
-                    animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
-                )
-            ) {
-                Column {
-                    if (playbackState.hasMedia) {
-                        MiniPlayer(
-                            state = playbackState,
-                            onOpenPlayer = { navController.navigate(Screen.Player.route) },
-                            onTogglePlayPause = playbackViewModel::togglePlayPause
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = isPlayerExpanded,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)) togetherWith
+                        fadeOut(animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis))
+            },
+            label = "playerExpansion"
+        ) { expanded ->
+            if (expanded) {
+                PlayerScreen(
+                    state = playbackState,
+                    onTogglePlayPause = playbackViewModel::togglePlayPause,
+                    onSeek = playbackViewModel::seekTo,
+                    onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
+                    onSleepTimerChange = playbackViewModel::setSleepTimer,
+                    playlists = pagedPlaylists,
+                    addedMemberships = playlistsState.addedMemberships,
+                    loadedMemberships = playlistsState.loadedMemberships,
+                    onLoadMemberships = playlistsViewModel::loadMemberships,
+                    onAddToPlaylist = playlistsViewModel::addSong,
+                    onCreatePlaylist = playlistsViewModel::create,
+                    onNext = playbackViewModel::next,
+                    onPrevious = playbackViewModel::previous,
+                    onShuffleChange = playbackViewModel::setShuffle,
+                    isDownloaded = downloadsState.songs.any { it.id == playbackState.mediaId },
+                    isDownloading = playbackState.mediaId in downloadsState.activeDownloadIds,
+                    downloadMessageRes = downloadsState.messageRes,
+                    onDownload = {
+                        downloadsViewModel.download(
+                            playbackState,
+                            profileState.user?.id,
+                            profileState.user?.hasActivePremium == true
                         )
-                    }
-                    MelodifyBottomBar(
-                        currentRoute = when {
-                            isPlaylistDetail -> Screen.Playlists.route
-                            isSocialDestination -> Screen.Search.route
-                            isChatDestination -> Screen.Search.route
-                            isRecentlyPlayed -> Screen.Home.route
-                            else -> currentRoute
-                        },
-                        user = profileState.user,
-                        onNavigate = { screen ->
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                    },
+                    onDismiss = { isPlayerExpanded = false },
+                    sharedTransitionScope = this@SharedTransitionLayout,
+                    animatedVisibilityScope = this@AnimatedContent
+                )
+            } else {
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    topBar = {
+                        if (
+                            !isPlaylistDetail && !isSocialDestination &&
+                            !isChatDestination && !isRecentlyPlayed
+                        ) {
+                            AppTopBar(
+                                isMainDestination = isMainDestination,
+                                titleRes = when (currentRoute) {
+                                    Screen.Notifications.route -> Screen.Notifications.titleRes
+                                    Screen.Settings.route -> Screen.Settings.titleRes
+                                    else -> null
+                                },
+                                onBackClick = { navController.popBackStack() },
+                                onMessagesClick = { navController.navigate(Screen.Conversations.route) },
+                                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                                onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                            )
+                        }
+                    },
+                    bottomBar = {
+                        AnimatedVisibility(
+                            visible = showAppBottomBar,
+                            enter = fadeIn(
+                                animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                            ),
+                            exit = fadeOut(
+                                animationSpec = tween(PlayerVisuals.navigationAnimationDurationMillis)
+                            )
+                        ) {
+                            Column {
+                                if (playbackState.hasMedia) {
+                                    MiniPlayer(
+                                        state = playbackState,
+                                        onOpenPlayer = { isPlayerExpanded = true },
+                                        onTogglePlayPause = playbackViewModel::togglePlayPause,
+                                        sharedTransitionScope = this@SharedTransitionLayout,
+                                        animatedVisibilityScope = this@AnimatedContent
+                                    )
                                 }
-                                launchSingleTop = true
-                                restoreState = true
+                                MelodifyBottomBar(
+                                    currentRoute = when {
+                                        isPlaylistDetail -> Screen.Playlists.route
+                                        isSocialDestination -> Screen.Search.route
+                                        isChatDestination -> Screen.Search.route
+                                        isRecentlyPlayed -> Screen.Home.route
+                                        else -> currentRoute
+                                    },
+                                    user = profileState.user,
+                                    onNavigate = { screen ->
+                                        navController.navigate(screen.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                )
                             }
                         }
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
-        ) {
+                    }
+                ) { innerPadding ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = Screen.Home.route,
+                        modifier = Modifier.padding(innerPadding)
+                    ){
             composable(Screen.Home.route) {
                 HomeScreen(
                     viewModel = homeViewModel,
@@ -359,55 +412,6 @@ fun SpotifyNavGraph(
                     onThemeModeChange = onThemeModeChange,
                     appLanguage = appLanguage,
                     onLanguageChange = onLanguageChange
-                )
-            }
-            composable(
-                route = Screen.Player.route,
-                enterTransition = {
-                    slideIntoContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.Up,
-                        animationSpec = tween(
-                            PlayerVisuals.navigationAnimationDurationMillis
-                        )
-                    )
-                },
-                popExitTransition = {
-                    slideOutOfContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.Down,
-                        animationSpec = tween(
-                            PlayerVisuals.navigationAnimationDurationMillis
-                        )
-                    )
-                }
-            ) {
-                PlayerScreen(
-                    state = playbackState,
-                    onTogglePlayPause = playbackViewModel::togglePlayPause,
-                    onSeek = playbackViewModel::seekTo,
-                    onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
-                    onSleepTimerChange = playbackViewModel::setSleepTimer,
-                    playlists = pagedPlaylists,
-                    addedMemberships = playlistsState.addedMemberships,
-                    loadedMemberships = playlistsState.loadedMemberships,
-                    onLoadMemberships = playlistsViewModel::loadMemberships,
-                    onAddToPlaylist = playlistsViewModel::addSong,
-                    onCreatePlaylist = playlistsViewModel::create,
-                    onNext = playbackViewModel::next,
-                    onPrevious = playbackViewModel::previous,
-                    onShuffleChange = playbackViewModel::setShuffle,
-                    isDownloaded = downloadsState.songs.any {
-                        it.id == playbackState.mediaId
-                    },
-                    isDownloading = playbackState.mediaId in downloadsState.activeDownloadIds,
-                    downloadMessageRes = downloadsState.messageRes,
-                    onDownload = {
-                        downloadsViewModel.download(
-                            playbackState,
-                            profileState.user?.id,
-                            profileState.user?.hasActivePremium == true
-                        )
-                    },
-                    onDismiss = { navController.popBackStack() }
                 )
             }
         }
